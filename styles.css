@@ -54,6 +54,38 @@ header {
     font-size: clamp(8px,  6vmin, 70px);
 }
 
+.cta-group {
+    display: flex;
+    gap: 1rem;
+}
+
+.cta-1 {
+    background: white;
+    color: black;
+}
+
+.cta-2 {
+    background: black;
+    color: white;
+}
+
+.cta-1:hover, .cta-2:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+ 
+.cta-group .cta-1,
+.cta-group .cta-2 {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 1rem 2rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: inline-block;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
 footer {
     box-sizing: border-box;
     display: flex;
