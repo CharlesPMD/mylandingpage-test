@@ -17,12 +17,14 @@ header {
 
 .logo {
     font-weight: 600;
-    font-size: 24px;
+    font-size: 26px;
 }
 
 .contact {
     text-decoration: none;
     color: #333;
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .content {
@@ -39,7 +41,7 @@ header {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 400px;
+    min-height: 600px;
     width: 100%;
     padding: 60px;
     border-radius: 50px;
@@ -49,6 +51,31 @@ header {
 .block h1, .block h2 {
     margin: 0;
     color: white;
-    font-size: clamp(20px,  8vmin, 70px);
+    font-size: clamp(8px,  6vmin, 70px);
 }
 
+footer {
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    width: 100%;
+    padding: 60px;
+    color: black;
+    font-size: clamp(8px,  4vmin, 30px);
+}
+
+
+@media only screen and (max-width: 760px) {
+
+    .content {
+        gap: 20px;
+        padding: 20px;
+    }
+
+    .block {
+        min-height: 300px;
+        border-radius: 40px;
+    }
+}
