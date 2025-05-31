@@ -75,7 +75,7 @@ header {
 }
 
 .cta-1:hover, .cta-2:hover {
-    transform: translateY(-2px);
+    transform: translateY(-4px);
     box-shadow: 0 6px 12px rgba(0,0,0,0.15);
 }
  
@@ -83,7 +83,7 @@ header {
 .cta-group .cta-2 {
     text-decoration: none;
     padding: 1rem 2rem;
-    border-radius: 4px;
+    border-radius: 30px;
     transition: all 0.2s ease;
     display: inline-block;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
