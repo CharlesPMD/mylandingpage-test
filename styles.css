@@ -89,18 +89,6 @@ header {
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
-footer {
-    box-sizing: border-box;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 300px;
-    width: 100%;
-    padding: 60px;
-    color: black;
-    font-size: clamp(8px,  4vmin, 30px);
-}
-
 .lead-form {
     max-width: 500px;
     width: 100%;
@@ -140,6 +128,18 @@ footer {
 .lead-submit:hover {
     transform: translateY(-4px);
     box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+
+footer {
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    width: 100%;
+    padding: 60px;
+    color: black;
+    font-size: clamp(8px,  4vmin, 30px);
 }
 
 @media only screen and (max-width: 760px) {
