@@ -53,10 +53,14 @@
         <section id="lead" class="block" style="background-color: #f097fc;">
             <h2>Lead Form</h2>
             <form class="lead-form">
-                <input type="tel" name="phone" placeholder="Phone" required>
-                <input type="email" name="email" placeholder="Email" required>
-                <input type="text" name="company" placeholder="Company" required>
-                <textarea name="message" placeholder="Message" rows="4" required></textarea>
+                <label for="phone">Phone</label>
+                <input id="phone" type="tel" name="phone" placeholder="e.g. +1 (555) 123-4567" required>
+                <label for="email">Email</label>
+                <input id="email" type="email" name="email" placeholder="e.g. john.doe@example.com" required>
+                <label for="company">Company</label>
+                <input id="company" type="text" name="company" placeholder="e.g. Acme Corp." required>
+                <label for="message">Message</label>
+                <textarea id="message" name="message" placeholder="e.g. I'm interested in your services." rows="4" required></textarea>
                 <button type="submit" class="lead-submit">Submit</button>
             </form>
         </section>

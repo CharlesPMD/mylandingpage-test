@@ -110,6 +110,13 @@ header {
     font-family: 'Poppins', sans-serif;
 }
 
+.lead-form label {
+    display: block;
+    color: black;
+    font-size: 18px;
+    font-weight: 600;
+}
+
 .lead-submit {
     background: #363636;
     color: white;
@@ -121,7 +128,7 @@ header {
     font-weight: 600;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     transition: all 0.2s ease;
-    align-self: flex-start;
+    align-self: center;
     margin-top: 1rem;
 }
 
