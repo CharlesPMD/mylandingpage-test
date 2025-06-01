@@ -1,2 +1,5 @@
-# PhpStorm Files
+# PhpStorm
 .idea/
+
+# Cursor
+.cursor/
