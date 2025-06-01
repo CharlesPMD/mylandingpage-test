@@ -103,7 +103,7 @@ header {
     display: block;     /* removes the small inline-gap    */
 }
 
-.lead-form {
+.form-1 {
     max-width: 500px;
     width: 100%;
     display: flex;
@@ -111,8 +111,8 @@ header {
     gap: 0.5rem;
 }
 
-.lead-form input,
-.lead-form textarea {
+.form-1 input,
+.form-1 textarea {
     width: 100%;
     box-sizing: border-box;
     margin-bottom: 1rem;
@@ -123,14 +123,14 @@ header {
     font-family: 'Poppins', sans-serif;
 }
 
-.lead-form label {
+.form-1 label {
     display: block;
     color: white;
     font-size: 18px;
     font-weight: 600;
 }
 
-.lead-submit {
+.form-1-button-submit {
     font-family: 'Poppins', sans-serif;
     font-weight: 600;
     background: #363636;
@@ -146,7 +146,7 @@ header {
     margin-top: 1rem;
 }
 
-.lead-submit:hover {
+.form-1-button-submit:hover {
     transform: translateY(-4px);
     box-shadow: 0 6px 12px rgba(0,0,0,0.15);
 }
