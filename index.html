@@ -15,6 +15,9 @@
     <title>My Landing Page</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="favicon.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="favicon.png" sizes="192x192" />
+
 </head>
 <body>
 
@@ -25,7 +28,7 @@
 
     <header>
         <div class="logo">My Landing Page</div>
-        <a href="#contact" class="contact">Contact</a>
+        <a href="contact.html" class="contact">Contact</a>
     </header>
 
     <div class="content">
@@ -102,13 +105,24 @@
                 <input id="company" type="text" name="company" placeholder="Acme Corp." required>
                 <label for="message">Message</label>
                 <textarea id="message" name="message" placeholder="I'm interested in your services." rows="4" required></textarea>
-                <button type="submit" class="form-1-button-submit">Form Submit</button>
+                <button id="form-lead-button" type="submit" class="form-1-button-submit">Form Submit</button>
+            </form>
+        </section>
+
+        <section id="newsletter" class="block" style="background-color: #fc9797;">
+            <h2>Newsletter Form</h2>
+            <form id="form-newsletter" class="form-1" style="padding-top: 3rem;">
+                <label for="email">Email</label>
+                <input id="email" type="email" name="email" placeholder="john.doe@example.com" required>
+                <button id="form-newsletter-button" type="submit" class="form-1-button-submit">Form Submit</button>
             </form>
         </section>
 
        <footer>
             <h2>Footer</h2>
        </footer>
+
     </div>
+
 </body>
 </html>
