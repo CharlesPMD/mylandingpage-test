@@ -13,6 +13,7 @@ header {
     justify-content: space-between;
     align-items: center;
     padding: 40px;
+    justify-content: flex-start;
 }
 
 .logo {
@@ -20,11 +21,16 @@ header {
     font-size: 26px;
 }
 
-.contact {
+.header-link {
     text-decoration: none;
     color: #333;
     font-size: 18px;
     font-weight: 600;
+}
+
+.header-link:first-of-type {       /* push the pair to the right */
+    margin-left: auto;
+    margin-right: 40px;            /* gap between the two links */
 }
 
 .content {
@@ -162,7 +168,7 @@ footer {
     width: 100%;
     padding: 1rem;
     color: black;
-    font-size: clamp(8px,  4vmin, 30px);
+    font-size: clamp(8px,  4vmin, 20px);
 }
 
 @media only screen and (max-width: 760px) {
@@ -171,7 +177,7 @@ footer {
         font-size: 18px;
     }
     
-    .contact {
+    .header-link {
         font-size: 14px;
     }
 
