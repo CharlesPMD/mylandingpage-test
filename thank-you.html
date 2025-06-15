@@ -12,7 +12,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact</title>
+    <title>Welcome</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/png" href="favicon.png" sizes="32x32" />
@@ -33,28 +33,45 @@
 
     <div class="content">
 
-        <section id="contact" class="block" style="background-color: #fc9797;">
+        <section id="thank-you" class="block" style="background-color: #56c98f;">
 
-            <h1>Contact Form</h1>
+            <h1>Thank you</h1>
 
-            <form id="form-contact"
-                  action="" method="post"
-                  class="form-1" 
-                  style="padding-top: 3rem;">
-                <label for="email">Email</label>
-                <input id="email" type="email" name="email" placeholder="john.doe@example.com" required>
-                <label for="message">Message</label>
-                <textarea id="message" name="message" placeholder="I'm interested in your services." rows="4" required></textarea>
-                <button id="form-contact-button" type="submit" class="form-1-button-submit">Form Submit</button>
-            </form>
+            <div class="card-group">
+
+                <div id="message" class="card">
+                    Thank you for your message. We will get back to you soon.
+                </div>
+               
+
+            </div>
+
+            <div class="cta-group">
+                <a href="index.html" class="cta-2">Go back</a>
+            </div>
 
         </section>
 
-        <footer>
+
+       <footer>
             <h2>Footer</h2>
-        </footer>
+       </footer>
 
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+          // Get URL parameters:  ?message=Your%20custom%20text
+          const params  = new URLSearchParams(window.location.search);
+          const message = params.get('message');        // automatically decoded
+        
+          // If the parameter exists and isn’t just whitespace, swap the text
+          if (message && message.trim() !== '') {
+            const el = document.getElementById('message');
+            if (el) el.textContent = message;           // use textContent → no XSS risk
+          }
+        });
+    </script>
 
 </body>
 </html>
