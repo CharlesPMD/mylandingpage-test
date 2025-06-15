@@ -18,7 +18,8 @@
     <link rel="icon" type="image/png" href="favicon.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="favicon.png" sizes="192x192" />
 
-    <script src="config.js?v=2" defer></script>
+    <script src="/js/config.js?v=3" defer></script>
+    <script src="/js/global-submit-handler.js?v=2" defer></script>
 
 </head>
 <body>
@@ -140,6 +141,87 @@
        </footer>
 
     </div>
+
+    <script>
+        // Newsletter AJAX form submission
+        document.addEventListener('DOMContentLoaded', () => {
+            const newsletterForm = document.getElementById('form-newsletter');
+            const newsletterMessageDiv = document.getElementById('message-newsletter');
+            const submitButton = newsletterForm ? newsletterForm.querySelector('button[type="submit"]') : null;
+            const messageContainer = newsletterMessageDiv ? newsletterMessageDiv.parentElement : null;
+
+            if (newsletterForm && newsletterMessageDiv && submitButton && messageContainer) {
+                newsletterForm.addEventListener('submit', function(event) {
+                    event.preventDefault(); 
+
+                    const formData = new FormData(newsletterForm);
+                    const actionUrl = newsletterForm.getAttribute('action');
+
+                    // Reset message area: hide container, clear text, set base class
+                    if (messageContainer) {
+                        messageContainer.style.display = 'none'; 
+                    }
+                    newsletterMessageDiv.textContent = '';
+                    newsletterMessageDiv.className = 'card'; // Base class
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Submitting...';
+
+                    if (!actionUrl || actionUrl.trim() === '') {
+                        newsletterMessageDiv.textContent = 'Error: Form submission endpoint is not configured.';
+                        newsletterMessageDiv.classList.add('message-error'); // Add error class
+                        if (messageContainer) {
+                            messageContainer.style.display = 'block'; 
+                        }
+                        submitButton.disabled = false;
+                        submitButton.textContent = 'Newsletter submit';
+                        return;
+                    }
+
+                    fetch(actionUrl, {
+                        method: 'POST',
+                        body: formData,
+                    })
+                    .then(response => {
+                        return response.text().then(text => {
+                            if (!response.ok) {
+                                // For !response.ok, create an Error object that includes the response text
+                                let error = new Error(`Server error: ${response.status} ${response.statusText}.`);
+                                error.responseText = text; // Attach the response text to the error object
+                                throw error;
+                            }
+                            return text; // This is the success message from the webhook
+                        });
+                    })
+                    .then(responseText => {
+                        newsletterMessageDiv.textContent = responseText;
+                        newsletterMessageDiv.classList.add('message-success'); // Add success class
+                        if (messageContainer) {
+                            messageContainer.style.display = 'block';
+                        }
+                        newsletterForm.reset(); 
+                    })
+                    .catch(error => {
+                        console.error('Newsletter AJAX submission error:', error);
+                        // If error has responseText (from !response.ok), use it. Otherwise, use error.message or a generic fallback.
+                        newsletterMessageDiv.textContent = error.responseText || error.message || 'Submission failed. Please try again.';
+                        newsletterMessageDiv.classList.add('message-error'); // Add error class
+                        if (messageContainer) {
+                            messageContainer.style.display = 'block'; 
+                        }
+                    })
+                    .finally(() => {
+                        submitButton.disabled = false;
+                        submitButton.textContent = 'Newsletter submit';
+                    });
+                });
+            } else {
+                if (!newsletterForm) console.error('Newsletter form (form-newsletter) not found.');
+                if (!newsletterMessageDiv) console.error('Newsletter message div (message-newsletter) not found.');
+                if (!submitButton) console.error('Newsletter submit button not found.');
+                if (!messageContainer) console.error('Message container (parent of message-newsletter) not found.');
+            }
+        });
+    </script>
 
 </body>
 </html>

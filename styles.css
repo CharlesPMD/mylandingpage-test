@@ -172,16 +172,19 @@ header {
     color: black;
     padding: 1rem;
     border-radius: 15px;
+    font-size: 16px;
 }
 
 .message-success {
     background-color: #56c98f;
     color: white;
+    font-weight: 600;
 }
 
 .message-error {
     background-color: #fe6d6d;
     color: white;
+    font-weight: 600;
 }
 
 footer {
