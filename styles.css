@@ -16,8 +16,17 @@ header {
 }
 
 .logo {
+    display: flex;
+    align-items: center;
     font-weight: 600;
     font-size: 26px;
+}
+
+.logo-icon {
+    height: 26px;
+    width: auto; 
+    margin-right: 10px; 
+    vertical-align: middle; 
 }
 
 .header-link {
@@ -204,6 +213,11 @@ footer {
         font-size: 20px;
     }
     
+    .logo-icon {
+        height: 20px; 
+        margin-right: 5px; 
+    }
+
     header {      
         padding: 40px 20px 40px 20px;
     }
