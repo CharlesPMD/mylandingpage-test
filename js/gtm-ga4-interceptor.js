@@ -1,27 +1,35 @@
-<!-- GA4 Network Hit Interceptor Script START (Cleaned) -->
-// --- GA4 Network Hit Interceptor Script ---
-// Version: 2025-06-22-B (Cleaned, retains all wrappers)
+/*
+*   --- GA4 Network Hit Interceptor Script ---
+*   Version: 2025-06-22-C (Placeholder preserved, newest event first)
+*/
+
 window.capturedGa4EventNames = window.capturedGa4EventNames || [];
 const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3;
-const MAX_STORED_EVENTS_IN_MEMORY = 20;
+const MAX_STORED_EVENTS_IN_MEMORY = 20; // How many to keep in memory overall
 let networkInterceptorInitialized = false;
 
 function updateCustomConsoleDisplayFromNetwork() {
     const eventDisplaySpan = document.getElementById('console-message-gtm');
     if (!eventDisplaySpan) { return; }
+
+    // --- TWEAK 1: Only update if we have captured events ---
     if (window.capturedGa4EventNames.length > 0) {
-        eventDisplaySpan.textContent = window.capturedGa4EventNames.slice(-MAX_DISPLAYED_EVENTS_IN_CONSOLE).join(', ');
-    } else {
-        eventDisplaySpan.textContent = "(Waiting for GA4 hits...)";
+        // Take the first MAX_DISPLAYED_EVENTS_IN_CONSOLE items (which are the newest)
+        eventDisplaySpan.textContent = window.capturedGa4EventNames.slice(0, MAX_DISPLAYED_EVENTS_IN_CONSOLE).join(', ');
     }
+    // If length is 0, we don't touch eventDisplaySpan.textContent, preserving initial HTML placeholder
 }
 
 function recordGa4EventFromNetwork(eventName, source, details) { 
     if (typeof eventName !== 'string' || !eventName) return;
     console.log(`%c[NetworkInterceptor] GA4 Event from Hit: "${eventName}" (Source: ${source})`, "color: #008080; font-weight: bold;", details);
-    window.capturedGa4EventNames.push(eventName);
+    
+    // --- TWEAK 2: Add to the beginning of the array (newest first) ---
+    window.capturedGa4EventNames.unshift(eventName); 
+
+    // Keep the array from growing indefinitely
     if (window.capturedGa4EventNames.length > MAX_STORED_EVENTS_IN_MEMORY) {
-        window.capturedGa4EventNames.shift();
+        window.capturedGa4EventNames.pop(); // Remove the oldest from the end
     }
     updateCustomConsoleDisplayFromNetwork();
 }
@@ -108,16 +116,20 @@ function initializeNetworkInterceptor() {
             let dataAsString = null;
             if (typeof data === 'string') { dataAsString = data; } 
             else if (data instanceof URLSearchParams) { dataAsString = data.toString(); }
-            // else if (data instanceof Blob) { console.log("[NetworkInterceptor] sendBeacon data is a Blob."); }
             parseAndLogGa4HitParameters(urlString, dataAsString, 'Beacon');
             return originalSendBeacon.apply(this, arguments);
         };
         console.log('[NetworkInterceptor] navigator.sendBeacon wrapped.');
     } else { console.warn('[NetworkInterceptor] navigator.sendBeacon not available for wrapping.'); }
 
-    updateCustomConsoleDisplayFromNetwork();
+    // --- TWEAK 1: Don't call update on init if placeholder is desired ---
+    // updateCustomConsoleDisplayFromNetwork(); // This would overwrite placeholder if called before any events
 }
 
 if (document.readyState === 'loading') { initializeNetworkInterceptor(); } 
 else { initializeNetworkInterceptor(); }
-document.addEventListener('DOMContentLoaded', () => { updateCustomConsoleDisplayFromNetwork(); });
+
+document.addEventListener('DOMContentLoaded', () => {
+    // --- TWEAK 1: Call here to ensure span exists, but it will only update if events were already captured ---
+    updateCustomConsoleDisplayFromNetwork(); 
+});
