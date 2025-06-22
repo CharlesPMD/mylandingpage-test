@@ -1,13 +1,12 @@
 // js/gtm-ga4-interceptor.js
-// Version: 2025-06-22-D (localStorage persistence, placeholder preserved, newest event first)
+// Version: 2025-06-22-F (Styled event names, localStorage, placeholder, newest first)
 
 (function() { // Self-invoking function to keep scope clean
     const LOCAL_STORAGE_KEY = 'ga4CapturedEventNames';
-    const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 5;
-    const MAX_STORED_EVENTS_IN_MEMORY_AND_STORAGE = 20; // Max to keep in memory and persist
+    const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 5; 
+    const MAX_STORED_EVENTS_IN_MEMORY_AND_STORAGE = 20; 
     let networkInterceptorInitialized = false;
     
-    // Load events from localStorage on script initialization
     let capturedGa4EventNames = [];
     try {
         const storedEvents = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -15,7 +14,6 @@
             const parsedEvents = JSON.parse(storedEvents);
             if (Array.isArray(parsedEvents)) {
                 capturedGa4EventNames = parsedEvents;
-                console.log('[NetworkInterceptor] Loaded events from localStorage:', capturedGa4EventNames);
             }
         }
     } catch (e) {
@@ -27,13 +25,19 @@
         if (!eventDisplaySpan) { return; }
 
         if (capturedGa4EventNames.length > 0) {
-            eventDisplaySpan.textContent = capturedGa4EventNames.slice(0, MAX_DISPLAYED_EVENTS_IN_CONSOLE).join(', ');
+            const eventsToDisplay = capturedGa4EventNames.slice(0, MAX_DISPLAYED_EVENTS_IN_CONSOLE);
+            // --- MODIFICATION START: Wrap each event in a styled span ---
+            const styledEventsHtml = eventsToDisplay.map(eventName => {
+                // Escape HTML special characters in eventName to prevent XSS if event names could contain them
+                // A simple escaper; for very robust needs, a library might be better.
+                const escapedEventName = eventName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                return `<span class="highlight-green">${escapedEventName}</span>`;
+            }).join(', '); // Join with comma and space
+            
+            eventDisplaySpan.innerHTML = styledEventsHtml; // Use innerHTML because we are setting HTML
+            // --- MODIFICATION END ---
         }
         // If length is 0, the original HTML placeholder (e.g., "Listening...") remains.
-        // If you want to explicitly set a "no events yet" message when loaded from empty localStorage:
-        // else {
-        //     eventDisplaySpan.textContent = "(No GA4 hits captured yet)";
-        // }
     }
 
     function recordGa4EventFromNetwork(eventName, source, details) { 
@@ -59,7 +63,7 @@
             if (!urlString || typeof urlString !== 'string' || (!urlString.startsWith('http:') && !urlString.startsWith('https:'))) {
                 return;
             }
-            const url = new URL(urlString, window.location.origin); // Use window.location.origin as base for relative URLs
+            const url = new URL(urlString, window.location.origin);
             if (!url.hostname.endsWith('google-analytics.com') || !url.pathname.includes('/g/collect')) {
                 return; 
             }
@@ -72,8 +76,6 @@
                 } catch (e) { /* console.warn for body parse error if needed */ }
             } else if (requestBody instanceof URLSearchParams) {
                  requestBody.forEach((value, key) => combinedParams.set(key, value));
-            } else if (requestBody instanceof Blob) {
-                // console.log(`[NetworkInterceptor] ${source} body is a Blob.`);
             }
             
             const ga4EventName = combinedParams.get('en');
@@ -94,9 +96,7 @@
     function initializeNetworkInterceptor() {
         if (networkInterceptorInitialized) return;
         networkInterceptorInitialized = true;
-        console.log('[NetworkInterceptor] Initializing...');
 
-        // --- Wrap XMLHttpRequest ---
         if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype && XMLHttpRequest.prototype.send) {
             const originalXHROpen = XMLHttpRequest.prototype.open;
             const originalXHRSend = XMLHttpRequest.prototype.send;
@@ -113,25 +113,21 @@
                 if (urlFromOpen) { parseAndLogGa4HitParameters(urlFromOpen, body, 'XHR'); }
                 return originalXHRSend.apply(this, arguments);
             };
-            console.log('[NetworkInterceptor] XMLHttpRequest wrapped.');
         } else { console.warn('[NetworkInterceptor] XMLHttpRequest not available for wrapping.'); }
 
-        // --- Wrap fetch ---
         if (typeof window.fetch === 'function') {
             const originalFetch = window.fetch;
             window.fetch = function(input, init) {
-                let urlString = ''; let requestBody = null; // let method = 'GET'; // method not strictly needed for parsing
+                let urlString = ''; let requestBody = null;
                 if (typeof input === 'string') { urlString = input; } 
                 else if (input instanceof URL) { urlString = input.toString(); } 
-                else if (input instanceof Request) { urlString = input.url; /* method = input.method; */ } // Request.body is a stream, harder to access
-                if (init) { /* if(init.method) method = init.method; */ if(init.body) requestBody = init.body; }
+                else if (input instanceof Request) { urlString = input.url; }
+                if (init) { if(init.body) requestBody = init.body; }
                 parseAndLogGa4HitParameters(urlString, requestBody, 'Fetch');
                 return originalFetch.apply(this, arguments);
             };
-            console.log('[NetworkInterceptor] Fetch wrapped.');
         } else { console.warn('[NetworkInterceptor] Fetch not available for wrapping.'); }
 
-        // --- Wrap navigator.sendBeacon ---
         if (navigator && typeof navigator.sendBeacon === 'function') {
             const originalSendBeacon = navigator.sendBeacon;
             navigator.sendBeacon = function(url, data) {
@@ -142,29 +138,18 @@
                 parseAndLogGa4HitParameters(urlString, dataAsString, 'Beacon');
                 return originalSendBeacon.apply(this, arguments);
             };
-            console.log('[NetworkInterceptor] navigator.sendBeacon wrapped.');
         } else { console.warn('[NetworkInterceptor] navigator.sendBeacon not available for wrapping.'); }
 
-        // Initial display update from potentially loaded localStorage
         updateCustomConsoleDisplayFromNetwork(); 
     }
 
-    // Initialize based on document state
     if (document.readyState === 'loading') { 
-        // If this script is in <head> without defer/async, it might run here.
-        // However, for interceptors, it's often better to wait for DOMContentLoaded 
-        // OR run immediately if you are 100% sure it's placed after GTM but before other critical scripts.
-        // For an external script, DOMContentLoaded is a safer bet for element access.
         document.addEventListener('DOMContentLoaded', initializeNetworkInterceptor);
     } else { 
-        // DOM is already interactive or complete
         initializeNetworkInterceptor();
     }
-
-    // Fallback: also ensure display is updated on DOMContentLoaded,
-    // in case localStorage was populated but the span wasn't ready during initial load.
     document.addEventListener('DOMContentLoaded', () => {
         updateCustomConsoleDisplayFromNetwork();
     });
 
-})(); // End of self-invoking function
+})();

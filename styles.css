@@ -219,7 +219,11 @@ footer {
     font-size: 16px;
     font-family: 'Poppins', sans-serif;
     z-index: 100;
-    border: 5px solid #7ee8b1;
+    border: 5px solid #8aedba;
+}
+
+.highlight-green {
+    background-color: #92ebbe;
 }
 
 @media only screen and (max-width: 760px) {
