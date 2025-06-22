@@ -1,19 +1,30 @@
 // js/gtm-ga4-interceptor.js
-// Version: 2025-06-22-F (Styled event names, localStorage, placeholder, newest first)
+// Version: 2025-06-22-G (localStorage with 30-min expiry, styled, placeholder, newest first)
 
 (function() { // Self-invoking function to keep scope clean
-    const LOCAL_STORAGE_KEY = 'ga4CapturedEventNames';
+    const LOCAL_STORAGE_KEY = 'ga4CapturedEventData'; // Changed key name slightly
     const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 5; 
     const MAX_STORED_EVENTS_IN_MEMORY_AND_STORAGE = 20; 
+    const EXPIRY_MINUTES = 30; // Expiry time in minutes
     let networkInterceptorInitialized = false;
     
     let capturedGa4EventNames = [];
     try {
-        const storedEvents = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (storedEvents) {
-            const parsedEvents = JSON.parse(storedEvents);
-            if (Array.isArray(parsedEvents)) {
-                capturedGa4EventNames = parsedEvents;
+        const storedDataString = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (storedDataString) {
+            const storedDataObject = JSON.parse(storedDataString);
+            if (storedDataObject && typeof storedDataObject.timestamp === 'number' && Array.isArray(storedDataObject.events)) {
+                const now = new Date().getTime();
+                const ageInMilliseconds = now - storedDataObject.timestamp;
+                const ageInMinutes = ageInMilliseconds / (1000 * 60);
+
+                if (ageInMinutes < EXPIRY_MINUTES) {
+                    capturedGa4EventNames = storedDataObject.events;
+                    console.log(`[NetworkInterceptor] Loaded ${capturedGa4EventNames.length} events from localStorage (not expired).`);
+                } else {
+                    console.log('[NetworkInterceptor] Stored events expired. Starting fresh.');
+                    localStorage.removeItem(LOCAL_STORAGE_KEY); // Clear expired data
+                }
             }
         }
     } catch (e) {
@@ -26,18 +37,13 @@
 
         if (capturedGa4EventNames.length > 0) {
             const eventsToDisplay = capturedGa4EventNames.slice(0, MAX_DISPLAYED_EVENTS_IN_CONSOLE);
-            // --- MODIFICATION START: Wrap each event in a styled span ---
             const styledEventsHtml = eventsToDisplay.map(eventName => {
-                // Escape HTML special characters in eventName to prevent XSS if event names could contain them
-                // A simple escaper; for very robust needs, a library might be better.
                 const escapedEventName = eventName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
                 return `<span class="highlight-green">${escapedEventName}</span>`;
-            }).join(', '); // Join with comma and space
-            
-            eventDisplaySpan.innerHTML = styledEventsHtml; // Use innerHTML because we are setting HTML
-            // --- MODIFICATION END ---
+            }).join(', '); 
+            eventDisplaySpan.innerHTML = styledEventsHtml;
         }
-        // If length is 0, the original HTML placeholder (e.g., "Listening...") remains.
+        // If length is 0, HTML placeholder remains.
     }
 
     function recordGa4EventFromNetwork(eventName, source, details) { 
@@ -51,7 +57,12 @@
         }
 
         try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(capturedGa4EventNames));
+            // Save events along with a timestamp
+            const dataToStore = {
+                timestamp: new Date().getTime(),
+                events: capturedGa4EventNames
+            };
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToStore));
         } catch (e) {
             console.error('[NetworkInterceptor] Error saving events to localStorage:', e);
         }
