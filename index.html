@@ -13,6 +13,7 @@
     <!-- GA4 Network Hit Interceptor Script START -->
     <script>
         // --- GA4 Network Hit Interceptor Script ---
+        // Version: 2025-06-22-A (handles POST with empty body, params in URL)
         window.capturedGa4EventNames = window.capturedGa4EventNames || [];
         const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3;
         const MAX_STORED_EVENTS_IN_MEMORY = 20;
@@ -40,56 +41,61 @@
 
         function parseAndLogGa4HitParameters(urlString, requestBody, source) {
             try {
-                const url = new URL(urlString, window.location.origin); // Ensure URL is absolute for parsing
-                if (!url.hostname.endsWith('google-analytics.com') || !url.pathname.includes('/g/collect')) {
-                    return; // Not a GA4 collect endpoint
+                // Ensure urlString is valid before creating URL object
+                if (!urlString || typeof urlString !== 'string' || (!urlString.startsWith('http:') && !urlString.startsWith('https:'))) {
+                    // console.warn('[NetworkInterceptor] Invalid URL string provided:', urlString);
+                    return;
                 }
 
-                let allParams = new URLSearchParams(url.search); // Get params from URL query string
+                const url = new URL(urlString, window.location.origin);
+                if (!url.hostname.endsWith('google-analytics.com') || !url.pathname.includes('/g/collect')) {
+                    return; 
+                }
 
-                // Attempt to parse requestBody if it's a string (common for XHR send & fetch body)
-                if (requestBody && typeof requestBody === 'string') {
+                // Start with parameters from the URL's query string
+                let combinedParams = new URLSearchParams(url.search); 
+                let bodyParamsProcessed = false;
+
+                // If a requestBody exists and is a string, try to parse it
+                if (requestBody && typeof requestBody === 'string' && requestBody.trim() !== '') {
                     try {
-                        const bodyParams = new URLSearchParams(requestBody);
-                        bodyParams.forEach((value, key) => {
-                            allParams.append(key, value); // Append, or set if you prefer override
+                        const bodyOnlyParams = new URLSearchParams(requestBody);
+                        bodyOnlyParams.forEach((value, key) => {
+                            combinedParams.set(key, value); // .set to override query params if same key exists in body
                         });
-                    } catch (e) {
-                        console.warn('[NetworkInterceptor] Could not parse requestBody as URLSearchParams:', requestBody, e);
+                        bodyParamsProcessed = true;
+                    } catch (e) { 
+                        console.warn(`[NetworkInterceptor] Could not parse string requestBody for ${source}:`, requestBody, e);
                     }
                 } else if (requestBody instanceof URLSearchParams) {
                      requestBody.forEach((value, key) => {
-                        allParams.append(key,value);
+                        combinedParams.set(key, value);
                      });
+                     bodyParamsProcessed = true;
+                } else if (requestBody instanceof Blob) {
+                    console.log(`[NetworkInterceptor] ${source} body is a Blob. Data not parsed by this basic interceptor.`);
+                } else if (requestBody) {
+                    // console.log(`[NetworkInterceptor] ${source} body is of type ${typeof requestBody}. Data:`, requestBody);
                 }
-                // Note: More complex body types (FormData, Blob, ArrayBuffer) are not handled here for simplicity.
-                // gtag.js typically uses string bodies for POST to /g/collect.
+                
+                // console.log(`[NetworkInterceptor] Source: ${source}, URL: ${urlString}, Body Processed: ${bodyParamsProcessed}, Combined Params: ${combinedParams.toString()}`);
 
-                const ga4EventName = allParams.get('en');
-                const measurementId = allParams.get('tid');
+                const ga4EventName = combinedParams.get('en');
+                const measurementId = combinedParams.get('tid');
 
                 if (ga4EventName) {
-                    recordGa4EventFromNetwork(ga4EventName, source, { 
-                        tid: measurementId, 
-                        url: urlString, 
-                        // allParams: allParams.toString() // Can be very verbose
-                    });
-                } else if (measurementId && allParams.get('v') === '2') {
-                    // If it's a GA4 hit (v=2) but no 'en', it might be a basic page_view from config
-                    // or other non-event hit. GTM Preview shows "page_view" for config hits.
-                    // We can infer 'page_view' if 'en' is missing but it's a GA4 config-like hit.
-                    // This is an assumption, as config hits don't always explicitly have en=page_view.
+                    recordGa4EventFromNetwork(ga4EventName, source, { tid: measurementId, url: urlString });
+                } else if (measurementId && combinedParams.get('v') === '2') {
+                    // Infer page_view if 'en' is missing but other GA4 params are present
                     let isLikelyConfigHit = false;
-                    allParams.forEach((value, key) => {
-                        if (key.startsWith('_p') || key === 'dl' || key === 'dt') isLikelyConfigHit = true;
+                    combinedParams.forEach((value, key) => { 
+                        if (key.startsWith('_p') || key === 'dl' || key === 'dt' || key === 'sid' || key === 'sct') isLikelyConfigHit = true; 
                     });
-                    if (isLikelyConfigHit && !allParams.has('en')) { // Check if 'en' is truly missing
+                    if (isLikelyConfigHit && !combinedParams.has('en')) {
                          recordGa4EventFromNetwork('page_view', `${source} (config inferred)`, { tid: measurementId, url: urlString });
                     }
                 }
-            } catch (e) {
-                console.error('[NetworkInterceptor] Error parsing GA4 hit:', e, urlString, requestBody);
-            }
+            } catch (e) { console.error('[NetworkInterceptor] Error parsing GA4 hit:', e, "URL:", urlString, "Body:", requestBody); }
         }
 
         function initializeNetworkInterceptor() {
@@ -101,66 +107,103 @@
             if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype && XMLHttpRequest.prototype.send) {
                 const originalXHROpen = XMLHttpRequest.prototype.open;
                 const originalXHRSend = XMLHttpRequest.prototype.send;
-                let xhrRequestURL = ''; // Store URL from open to use in send
+                // Use a property on the XHR instance itself to store its URL
+                const xhrUrlSymbol = Symbol ? Symbol('xhrUrl') : '__xhrUrl';
+
 
                 XMLHttpRequest.prototype.open = function(method, url, ...restArgs) {
-                    if (typeof url === 'string') {
-                        xhrRequestURL = url; // Capture URL
-                    }
+                    let urlString = '';
+                    if (typeof url === 'string') { urlString = url; } 
+                    else if (url instanceof URL) { urlString = url.toString(); }
+                    this[xhrUrlSymbol] = urlString; // Store URL on the instance
                     return originalXHROpen.apply(this, [method, url, ...restArgs]);
                 };
 
                 XMLHttpRequest.prototype.send = function(body) {
-                    if (xhrRequestURL) { // If we have a URL from a recent .open() call
-                        // console.log('[NetworkInterceptor] XHR Send. URL:', xhrRequestURL, 'Body:', body);
-                        parseAndLogGa4HitParameters(xhrRequestURL, body, 'XHR');
-                        xhrRequestURL = ''; // Clear for next XHR
+                    const urlFromOpen = this[xhrUrlSymbol];
+                    if (urlFromOpen) {
+                        // console.log('[NetworkInterceptor] XHR Send. URL:', urlFromOpen, 'Body:', body);
+                        parseAndLogGa4HitParameters(urlFromOpen, body, 'XHR');
                     }
                     return originalXHRSend.apply(this, arguments);
                 };
                 console.log('[NetworkInterceptor] XMLHttpRequest wrapped.');
-            } else {
-                console.warn('[NetworkInterceptor] XMLHttpRequest not available for wrapping.');
-            }
+            } else { console.warn('[NetworkInterceptor] XMLHttpRequest not available for wrapping.'); }
 
             // --- Wrap fetch ---
             if (typeof window.fetch === 'function') {
                 const originalFetch = window.fetch;
                 window.fetch = function(input, init) {
-                    let urlString = (typeof input === 'string') ? input : (input instanceof Request ? input.url : '');
-                    let requestBody = init ? init.body : (input instanceof Request ? input.body : null); // body can be stream
+                    let urlString = '';
+                    let requestBody = null; // Hold potential body
+                    let method = 'GET'; // Default method
+
+                    if (typeof input === 'string') { 
+                        urlString = input; 
+                    } else if (input instanceof URL) { 
+                        urlString = input.toString(); 
+                    } else if (input instanceof Request) { 
+                        urlString = input.url; 
+                        method = input.method;
+                        // Attempt to get body if Request object, but it might be a stream already consumed
+                        // For simplicity, we'll mainly rely on init.body if provided.
+                        // If input.body is used, it often needs to be cloned if it's a stream and read asynchronously.
+                    }
+
+                    if (init) {
+                        if(init.method) method = init.method;
+                        if(init.body) requestBody = init.body;
+                    }
                     
-                    // console.log('[NetworkInterceptor] Fetch call. URL:', urlString, 'Body given to fetch:', requestBody);
-                    
-                    // If body is a ReadableStream, we can't easily inspect it synchronously here.
-                    // gtag.js for /g/collect usually sends a string or URLSearchParams in the body for POST.
-                    // We'll proceed with what we have. If body is a stream, parseAndLog will likely not find params in it.
+                    // console.log(`[NetworkInterceptor] Fetch call. Method: ${method}, URL: ${urlString}`, init || '');
                     parseAndLogGa4HitParameters(urlString, requestBody, 'Fetch');
                     
                     return originalFetch.apply(this, arguments);
                 };
                 console.log('[NetworkInterceptor] Fetch wrapped.');
+            } else { console.warn('[NetworkInterceptor] Fetch not available for wrapping.'); }
+
+            // --- Wrap navigator.sendBeacon ---
+            if (navigator && typeof navigator.sendBeacon === 'function') {
+                const originalSendBeacon = navigator.sendBeacon;
+                navigator.sendBeacon = function(url, data) {
+                    const urlString = (typeof url === 'string') ? url : (url instanceof URL ? url.toString() : '');
+                    // console.log('[NetworkInterceptor] navigator.sendBeacon called. URL:', urlString, 'Data type:', typeof data);
+                    
+                    let dataAsString = null;
+                    if (typeof data === 'string') {
+                        dataAsString = data;
+                    } else if (data instanceof URLSearchParams) {
+                        dataAsString = data.toString();
+                    } else if (data instanceof Blob) {
+                         console.log("[NetworkInterceptor] sendBeacon data is a Blob. Parsing attempt for text types.");
+                         // Synchronous blob reading is not possible.
+                         // If it's URL encoded form data in a blob, this won't catch it here.
+                         // But GA4 often sends POST body as string even with sendBeacon.
+                    }
+                    parseAndLogGa4HitParameters(urlString, dataAsString, 'Beacon');
+                    return originalSendBeacon.apply(this, arguments);
+                };
+                console.log('[NetworkInterceptor] navigator.sendBeacon wrapped.');
             } else {
-                console.warn('[NetworkInterceptor] Fetch not available for wrapping.');
+                console.warn('[NetworkInterceptor] navigator.sendBeacon not available for wrapping.');
             }
-            updateCustomConsoleDisplayFromNetwork(); // Initial display
+
+            updateCustomConsoleDisplayFromNetwork();
         }
 
         // Initialize as early as possible
         if (document.readyState === 'loading') {
             initializeNetworkInterceptor();
         } else {
-            // If DOM is already interactive or complete
             initializeNetworkInterceptor();
         }
-
         document.addEventListener('DOMContentLoaded', () => {
-            updateCustomConsoleDisplayFromNetwork(); // Ensure display is set
-            // console.log('[NetworkInterceptor] DOMContentLoaded.');
+            updateCustomConsoleDisplayFromNetwork();
         });
     </script>
     <!-- GA4 Network Hit Interceptor Script END -->
-     
+          
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome</title>
