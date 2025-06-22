@@ -10,140 +10,157 @@
     })(window,document,'script','dataLayer','GTM-WLSQB5SF');</script>
     <!-- End Google Tag Manager -->
 
+    <!-- GA4 Network Hit Interceptor Script START -->
     <script>
-        // --- GA4 Event Interceptor Script ---
+        // --- GA4 Network Hit Interceptor Script ---
         window.capturedGa4EventNames = window.capturedGa4EventNames || [];
         const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3;
         const MAX_STORED_EVENTS_IN_MEMORY = 20;
-        let interceptorInitialized = false;
-        
-        // This will hold the reference to the "original" gtag function that our wrapper should call.
-        // It might be updated if gtag is redefined (e.g. stub -> full function).
-        let currentOriginalGtag = null; 
+        let networkInterceptorInitialized = false;
 
-        function updateCustomConsoleDisplay() {
+        function updateCustomConsoleDisplayFromNetwork() {
             const eventDisplaySpan = document.getElementById('console-message-gtm');
-            if (!eventDisplaySpan) {
-                return;
-            }
+            if (!eventDisplaySpan) { return; }
             if (window.capturedGa4EventNames.length > 0) {
                 eventDisplaySpan.textContent = window.capturedGa4EventNames.slice(-MAX_DISPLAYED_EVENTS_IN_CONSOLE).join(', ');
             } else {
-                eventDisplaySpan.textContent = "(Waiting for GA4 events...)";
+                eventDisplaySpan.textContent = "(Waiting for GA4 hits...)";
             }
         }
 
-        function recordGa4Event(eventName, source) {
+        function recordGa4EventFromNetwork(eventName, source, details) { 
             if (typeof eventName !== 'string' || !eventName) return;
-            console.log(`%c[Interceptor] GA4 Event: "${eventName}" (Source: ${source})`, "color: green; font-weight: bold;");
+            console.log(`%c[NetworkInterceptor] GA4 Event from Hit: "${eventName}" (Source: ${source})`, "color: #008080; font-weight: bold;", details);
             window.capturedGa4EventNames.push(eventName);
             if (window.capturedGa4EventNames.length > MAX_STORED_EVENTS_IN_MEMORY) {
                 window.capturedGa4EventNames.shift();
             }
-            updateCustomConsoleDisplay();
+            updateCustomConsoleDisplayFromNetwork();
         }
 
-        function initializeGa4Interceptor() {
-            if (interceptorInitialized) return;
-            interceptorInitialized = true;
-            console.log('[Interceptor] Initializing GA4 Interceptor...');
+        function parseAndLogGa4HitParameters(urlString, requestBody, source) {
+            try {
+                const url = new URL(urlString, window.location.origin); // Ensure URL is absolute for parsing
+                if (!url.hostname.endsWith('google-analytics.com') || !url.pathname.includes('/g/collect')) {
+                    return; // Not a GA4 collect endpoint
+                }
 
-            // 1. Wrap dataLayer.push (for early calls to gtag stub that push arguments)
-            if (window.dataLayer && typeof window.dataLayer.push === 'function') {
-                const originalDataLayerPush = window.dataLayer.push;
-                window.dataLayer.push = function(...pushedArgs) {
-                    const firstArg = pushedArgs[0];
-                    // Check if it's the `arguments` object from a gtag stub call
-                    if (firstArg && typeof firstArg === 'object' && typeof firstArg.length === 'number' && 
-                        firstArg[0] === 'event' && typeof firstArg[1] === 'string') {
-                        recordGa4Event(firstArg[1], 'dataLayer.push (gtag arguments)');
+                let allParams = new URLSearchParams(url.search); // Get params from URL query string
+
+                // Attempt to parse requestBody if it's a string (common for XHR send & fetch body)
+                if (requestBody && typeof requestBody === 'string') {
+                    try {
+                        const bodyParams = new URLSearchParams(requestBody);
+                        bodyParams.forEach((value, key) => {
+                            allParams.append(key, value); // Append, or set if you prefer override
+                        });
+                    } catch (e) {
+                        console.warn('[NetworkInterceptor] Could not parse requestBody as URLSearchParams:', requestBody, e);
                     }
-                    return originalDataLayerPush.apply(window.dataLayer, pushedArgs);
+                } else if (requestBody instanceof URLSearchParams) {
+                     requestBody.forEach((value, key) => {
+                        allParams.append(key,value);
+                     });
+                }
+                // Note: More complex body types (FormData, Blob, ArrayBuffer) are not handled here for simplicity.
+                // gtag.js typically uses string bodies for POST to /g/collect.
+
+                const ga4EventName = allParams.get('en');
+                const measurementId = allParams.get('tid');
+
+                if (ga4EventName) {
+                    recordGa4EventFromNetwork(ga4EventName, source, { 
+                        tid: measurementId, 
+                        url: urlString, 
+                        // allParams: allParams.toString() // Can be very verbose
+                    });
+                } else if (measurementId && allParams.get('v') === '2') {
+                    // If it's a GA4 hit (v=2) but no 'en', it might be a basic page_view from config
+                    // or other non-event hit. GTM Preview shows "page_view" for config hits.
+                    // We can infer 'page_view' if 'en' is missing but it's a GA4 config-like hit.
+                    // This is an assumption, as config hits don't always explicitly have en=page_view.
+                    let isLikelyConfigHit = false;
+                    allParams.forEach((value, key) => {
+                        if (key.startsWith('_p') || key === 'dl' || key === 'dt') isLikelyConfigHit = true;
+                    });
+                    if (isLikelyConfigHit && !allParams.has('en')) { // Check if 'en' is truly missing
+                         recordGa4EventFromNetwork('page_view', `${source} (config inferred)`, { tid: measurementId, url: urlString });
+                    }
+                }
+            } catch (e) {
+                console.error('[NetworkInterceptor] Error parsing GA4 hit:', e, urlString, requestBody);
+            }
+        }
+
+        function initializeNetworkInterceptor() {
+            if (networkInterceptorInitialized) return;
+            networkInterceptorInitialized = true;
+            console.log('[NetworkInterceptor] Initializing...');
+
+            // --- Wrap XMLHttpRequest ---
+            if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype && XMLHttpRequest.prototype.send) {
+                const originalXHROpen = XMLHttpRequest.prototype.open;
+                const originalXHRSend = XMLHttpRequest.prototype.send;
+                let xhrRequestURL = ''; // Store URL from open to use in send
+
+                XMLHttpRequest.prototype.open = function(method, url, ...restArgs) {
+                    if (typeof url === 'string') {
+                        xhrRequestURL = url; // Capture URL
+                    }
+                    return originalXHROpen.apply(this, [method, url, ...restArgs]);
                 };
-                console.log('[Interceptor] dataLayer.push has been wrapped.');
+
+                XMLHttpRequest.prototype.send = function(body) {
+                    if (xhrRequestURL) { // If we have a URL from a recent .open() call
+                        // console.log('[NetworkInterceptor] XHR Send. URL:', xhrRequestURL, 'Body:', body);
+                        parseAndLogGa4HitParameters(xhrRequestURL, body, 'XHR');
+                        xhrRequestURL = ''; // Clear for next XHR
+                    }
+                    return originalXHRSend.apply(this, arguments);
+                };
+                console.log('[NetworkInterceptor] XMLHttpRequest wrapped.');
             } else {
-                console.warn('[Interceptor] window.dataLayer.push not found for wrapping.');
+                console.warn('[NetworkInterceptor] XMLHttpRequest not available for wrapping.');
             }
 
-            // 2. Poll for and wrap/re-wrap window.gtag
-            let gtagDirectWrapAttempts = 0;
-            const maxGtagDirectWrapAttempts = 40; // ~20 seconds for GTM to fully load gtag
-
-            function attemptDirectGtagWrap() {
-                gtagDirectWrapAttempts++;
-                // console.log(`[Interceptor] attemptDirectGtagWrap - Attempt #${gtagDirectWrapAttempts}`); // Can be noisy
-
-                if (typeof window.gtag === 'function') {
-                    // If window.gtag is a function AND it's not our current wrapper, then it needs wrapping/re-wrapping.
-                    if (window.gtag.name !== 'interceptedGtagFunction') { 
-                        console.log(`[Interceptor] Found window.gtag (name: ${window.gtag.name || 'anonymous'}). It's not our wrapper or has been reset. Storing and (re-)wrapping.`);
-                        
-                        currentOriginalGtag = window.gtag; // Store the *current* window.gtag we are about to wrap
-
-                        window.gtag = function interceptedGtagFunction(...gtagArgs) {
-                            console.log('%c[Interceptor] gtag WRAPPER CALLED. Arguments:', "color: blue; font-weight: bold;", gtagArgs);
-                            
-                            if (gtagArgs.length >= 1) {
-                                const command = gtagArgs[0];
-                                const eventName = gtagArgs[1];
-
-                                if (command === 'event' && typeof eventName === 'string') {
-                                    recordGa4Event(eventName, 'gtag (event)');
-                                } else if (command === 'config' && typeof eventName === 'string' && eventName.startsWith('G-')) {
-                                    let sendPageView = true;
-                                    if (gtagArgs[2] && typeof gtagArgs[2].send_page_view === 'boolean') {
-                                        sendPageView = gtagArgs[2].send_page_view;
-                                    }
-                                    if (sendPageView) {
-                                        recordGa4Event('page_view', 'gtag (config)');
-                                    }
-                                    console.log('[Interceptor] gtag config call for:', eventName);
-                                } else if (command === 'consent') {
-                                    console.log('[Interceptor] gtag consent call:', gtagArgs);
-                                    // You could optionally record a 'consent_update' event here for display if desired
-                                    // recordGa4Event('consent_processed', 'gtag (consent)');
-                                }
-                            }
-
-                            if (typeof currentOriginalGtag === 'function') {
-                                return currentOriginalGtag.apply(this, gtagArgs);
-                            } else {
-                                console.error("[Interceptor] CRITICAL: Original gtag function reference (currentOriginalGtag) is lost!");
-                                // This would be an issue. It implies currentOriginalGtag was not set correctly before wrapping.
-                            }
-                        };
-                        console.log('[Interceptor] window.gtag has been REPLACED with our wrapper (interceptedGtagFunction).');
-                    } else {
-                        // console.log('[Interceptor] window.gtag is still our wrapper. No re-wrap needed on this attempt.');
-                    }
-                }
-
-                // Continue polling if not all attempts used up, to catch late redefinitions of gtag
-                if (gtagDirectWrapAttempts < maxGtagDirectWrapAttempts) {
-                    setTimeout(attemptDirectGtagWrap, 500);
-                } else {
-                    if (typeof window.gtag !== 'function' || window.gtag.name !== 'interceptedGtagFunction') {
-                         console.warn('[Interceptor] Max polling attempts reached. window.gtag might not be correctly wrapped or GTM did not load/redefine gtag as expected.');
-                    } else {
-                         console.log('[Interceptor] Max polling attempts reached. window.gtag appears to be our active wrapper.');
-                    }
-                }
+            // --- Wrap fetch ---
+            if (typeof window.fetch === 'function') {
+                const originalFetch = window.fetch;
+                window.fetch = function(input, init) {
+                    let urlString = (typeof input === 'string') ? input : (input instanceof Request ? input.url : '');
+                    let requestBody = init ? init.body : (input instanceof Request ? input.body : null); // body can be stream
+                    
+                    // console.log('[NetworkInterceptor] Fetch call. URL:', urlString, 'Body given to fetch:', requestBody);
+                    
+                    // If body is a ReadableStream, we can't easily inspect it synchronously here.
+                    // gtag.js for /g/collect usually sends a string or URLSearchParams in the body for POST.
+                    // We'll proceed with what we have. If body is a stream, parseAndLog will likely not find params in it.
+                    parseAndLogGa4HitParameters(urlString, requestBody, 'Fetch');
+                    
+                    return originalFetch.apply(this, arguments);
+                };
+                console.log('[NetworkInterceptor] Fetch wrapped.');
+            } else {
+                console.warn('[NetworkInterceptor] Fetch not available for wrapping.');
             }
-            attemptDirectGtagWrap(); // Start the polling
+            updateCustomConsoleDisplayFromNetwork(); // Initial display
         }
 
+        // Initialize as early as possible
         if (document.readyState === 'loading') {
-            initializeGa4Interceptor();
+            initializeNetworkInterceptor();
         } else {
-            initializeGa4Interceptor();
+            // If DOM is already interactive or complete
+            initializeNetworkInterceptor();
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            updateCustomConsoleDisplay();
-            console.log('[Interceptor] DOMContentLoaded: Custom console display updated / verified.');
+            updateCustomConsoleDisplayFromNetwork(); // Ensure display is set
+            // console.log('[NetworkInterceptor] DOMContentLoaded.');
         });
     </script>
-
+    <!-- GA4 Network Hit Interceptor Script END -->
+     
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome</title>
