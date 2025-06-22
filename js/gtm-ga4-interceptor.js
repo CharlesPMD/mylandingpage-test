@@ -3,7 +3,7 @@
 
 (function() { // Self-invoking function to keep scope clean
     const LOCAL_STORAGE_KEY = 'ga4CapturedEventNames';
-    const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3;
+    const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 5;
     const MAX_STORED_EVENTS_IN_MEMORY_AND_STORAGE = 20; // Max to keep in memory and persist
     let networkInterceptorInitialized = false;
     
