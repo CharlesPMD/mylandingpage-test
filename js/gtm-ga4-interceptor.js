@@ -1,113 +1,123 @@
-
-// --- GA4 Event Interceptor Script ---
-// This script attempts to capture GA4 event names as they are sent.
-
-// Global store for captured GA4 event names
+<!-- GA4 Network Hit Interceptor Script START (Cleaned) -->
+// --- GA4 Network Hit Interceptor Script ---
+// Version: 2025-06-22-B (Cleaned, retains all wrappers)
 window.capturedGa4EventNames = window.capturedGa4EventNames || [];
-const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3; // How many to show in your custom console span
-const MAX_STORED_EVENTS_IN_MEMORY = 20;   // How many to keep in the script's memory
+const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3;
+const MAX_STORED_EVENTS_IN_MEMORY = 20;
+let networkInterceptorInitialized = false;
 
-// Function to update your <span id="console-message-gtm">
-function updateCustomConsoleDisplay() {
+function updateCustomConsoleDisplayFromNetwork() {
     const eventDisplaySpan = document.getElementById('console-message-gtm');
-    if (!eventDisplaySpan) {
-        // If DOM isn't ready or span is missing, it will be updated later by DOMContentLoaded.
-        return;
-    }
-
+    if (!eventDisplaySpan) { return; }
     if (window.capturedGa4EventNames.length > 0) {
         eventDisplaySpan.textContent = window.capturedGa4EventNames.slice(-MAX_DISPLAYED_EVENTS_IN_CONSOLE).join(', ');
     } else {
-        eventDisplaySpan.textContent = "(No GA4 events captured yet)";
+        eventDisplaySpan.textContent = "(Waiting for GA4 hits...)";
     }
 }
 
-// Helper to add event and update display (with basic deduplication for recently added same event name)
-function recordGa4Event(eventName) {
+function recordGa4EventFromNetwork(eventName, source, details) { 
     if (typeof eventName !== 'string' || !eventName) return;
-
-    // Basic check to avoid rapid, identical sequential additions if multiple wrappers catch it.
-    if (window.capturedGa4EventNames.length > 0 && 
-        window.capturedGa4EventNames[window.capturedGa4EventNames.length - 1] === eventName) {
-        // console.log(`Event "${eventName}" was already the last recorded. Skipping duplicate addition.`);
-        // return; // Skip if it's an immediate duplicate from different wrappers.
-        // For now, let's allow it and see the logs to understand if deduplication is truly needed.
-    }
-
+    console.log(`%c[NetworkInterceptor] GA4 Event from Hit: "${eventName}" (Source: ${source})`, "color: #008080; font-weight: bold;", details);
     window.capturedGa4EventNames.push(eventName);
     if (window.capturedGa4EventNames.length > MAX_STORED_EVENTS_IN_MEMORY) {
-        window.capturedGa4EventNames.shift(); // Remove oldest
+        window.capturedGa4EventNames.shift();
     }
-    updateCustomConsoleDisplay(); // Update DOM if possible
+    updateCustomConsoleDisplayFromNetwork();
 }
 
-// 1. Wrap dataLayer.push (to catch gtag calls made via GTM's initial stub)
-if (window.dataLayer && typeof window.dataLayer.push === 'function') {
-    const originalDataLayerPush = window.dataLayer.push;
-    window.dataLayer.push = function(...pushedArgs) {
-        // Check if this looks like a gtag call: dataLayer.push(arguments) where arguments[0] is 'event'
-        if (pushedArgs.length > 0 && pushedArgs[0] && 
-            typeof pushedArgs[0] === 'object' && // `arguments` is an object
-            typeof pushedArgs[0].length === 'number' && // `arguments` has a length property
-            pushedArgs[0][0] === 'event' && typeof pushedArgs[0][1] === 'string') {
-            
-            const ga4EventNameFromDataLayer = pushedArgs[0][1];
-            console.log('[Interceptor] GA4 Event via dataLayer.push (gtag stub):', ga4EventNameFromDataLayer, 'Params:', pushedArgs[0][2] || {});
-            recordGa4Event(ga4EventNameFromDataLayer);
-        } else {
-            // Log other types of dataLayer.push events for general debugging if needed
-            // pushedArgs.forEach(arg => {
-            //     if (arg && typeof arg.event === 'string') {
-            //         console.log('[Interceptor] Standard dataLayer.push event:', arg.event);
-            //     }
-            // });
+function parseAndLogGa4HitParameters(urlString, requestBody, source) {
+    try {
+        if (!urlString || typeof urlString !== 'string' || (!urlString.startsWith('http:') && !urlString.startsWith('https:'))) {
+            return;
         }
-        return originalDataLayerPush.apply(window.dataLayer, pushedArgs);
-    };
-    console.log('[Interceptor] dataLayer.push has been wrapped.');
-} else {
-    console.warn('[Interceptor] window.dataLayer.push not found or not a function when script ran.');
-}
-
-// 2. Poll for and wrap window.gtag directly (for fully loaded gtag.js or other gtag definitions)
-let gtagDirectWrapAttempts = 0;
-const maxGtagDirectWrapAttempts = 25; // Try for about 12.5 seconds
-
-function attemptDirectGtagWrap() {
-    gtagDirectWrapAttempts++;
-    if (typeof window.gtag === 'function') {
-        // Check if it's already our wrapper to prevent multiple wraps of the same instance
-        if (window.gtag.name === 'interceptedGtagFunction') {
-                console.log('[Interceptor] window.gtag already wrapped by this script.');
-                return;
+        const url = new URL(urlString, window.location.origin);
+        if (!url.hostname.endsWith('google-analytics.com') || !url.pathname.includes('/g/collect')) {
+            return; 
         }
 
-        const originalGtagFunction = window.gtag;
-        console.log('[Interceptor] Found window.gtag. Wrapping it directly.');
+        let combinedParams = new URLSearchParams(url.search); 
+        if (requestBody && typeof requestBody === 'string' && requestBody.trim() !== '') {
+            try {
+                const bodyOnlyParams = new URLSearchParams(requestBody);
+                bodyOnlyParams.forEach((value, key) => combinedParams.set(key, value));
+            } catch (e) { /* console.warn for body parse error if needed */ }
+        } else if (requestBody instanceof URLSearchParams) {
+                requestBody.forEach((value, key) => combinedParams.set(key, value));
+        } else if (requestBody instanceof Blob) {
+            // console.log(`[NetworkInterceptor] ${source} body is a Blob.`);
+        }
+        
+        const ga4EventName = combinedParams.get('en');
+        const measurementId = combinedParams.get('tid');
 
-        window.gtag = function interceptedGtagFunction(...gtagArgs) {
-            if (gtagArgs.length >= 2 && gtagArgs[0] === 'event' && typeof gtagArgs[1] === 'string') {
-                const ga4EventNameFromDirectGtag = gtagArgs[1];
-                console.log('[Interceptor] GA4 Event via direct window.gtag call:', ga4EventNameFromDirectGtag, 'Parameters:', gtagArgs[2] || {});
-                recordGa4Event(ga4EventNameFromDirectGtag);
+        if (ga4EventName) {
+            recordGa4EventFromNetwork(ga4EventName, source, { tid: measurementId, url: urlString.substring(0, 150) + (urlString.length > 150 ? "..." : "") });
+        } else if (measurementId && combinedParams.get('v') === '2') {
+            let isLikelyConfigHit = false;
+            combinedParams.forEach((value, key) => { if (key.startsWith('_p') || key === 'dl' || key === 'dt' || key === 'sid' || key === 'sct') isLikelyConfigHit = true; });
+            if (isLikelyConfigHit && !combinedParams.has('en')) {
+                    recordGa4EventFromNetwork('page_view', `${source} (config inferred)`, { tid: measurementId, url: urlString.substring(0, 150) + (urlString.length > 150 ? "..." : "") });
             }
-            return originalGtagFunction.apply(this, gtagArgs);
-        };
-        console.log('[Interceptor] window.gtag has been wrapped directly.');
-
-    } else if (gtagDirectWrapAttempts < maxGtagDirectWrapAttempts) {
-        // console.log(`[Interceptor] window.gtag not a function yet (Attempt ${gtagDirectWrapAttempts}). Retrying...`);
-        setTimeout(attemptDirectGtagWrap, 500);
-    } else {
-        console.warn('[Interceptor] window.gtag did not become a function after multiple attempts. Direct wrapping may have failed or is not needed.');
-    }
+        }
+    } catch (e) { console.error('[NetworkInterceptor] Error parsing GA4 hit:', e, "URL:", urlString, "Body:", requestBody); }
 }
-attemptDirectGtagWrap(); // Start the process
 
-// Ensure the display is updated once the DOM is fully loaded,
-// using any events captured up to that point.
-document.addEventListener('DOMContentLoaded', () => {
-    updateCustomConsoleDisplay(); // Initial update for the span on DOM ready
-    console.log('[Interceptor] DOMContentLoaded: Custom console display updated.');
-});
+function initializeNetworkInterceptor() {
+    if (networkInterceptorInitialized) return;
+    networkInterceptorInitialized = true;
+    console.log('[NetworkInterceptor] Initializing...');
 
+    if (typeof XMLHttpRequest !== 'undefined' && XMLHttpRequest.prototype && XMLHttpRequest.prototype.send) {
+        const originalXHROpen = XMLHttpRequest.prototype.open;
+        const originalXHRSend = XMLHttpRequest.prototype.send;
+        const xhrUrlSymbol = Symbol ? Symbol('xhrUrl') : '__xhrUrl';
+        XMLHttpRequest.prototype.open = function(method, url, ...restArgs) {
+            let urlString = '';
+            if (typeof url === 'string') { urlString = url; } 
+            else if (url instanceof URL) { urlString = url.toString(); }
+            this[xhrUrlSymbol] = urlString;
+            return originalXHROpen.apply(this, [method, url, ...restArgs]);
+        };
+        XMLHttpRequest.prototype.send = function(body) {
+            const urlFromOpen = this[xhrUrlSymbol];
+            if (urlFromOpen) { parseAndLogGa4HitParameters(urlFromOpen, body, 'XHR'); }
+            return originalXHRSend.apply(this, arguments);
+        };
+        console.log('[NetworkInterceptor] XMLHttpRequest wrapped.');
+    } else { console.warn('[NetworkInterceptor] XMLHttpRequest not available for wrapping.'); }
+
+    if (typeof window.fetch === 'function') {
+        const originalFetch = window.fetch;
+        window.fetch = function(input, init) {
+            let urlString = ''; let requestBody = null; let method = 'GET';
+            if (typeof input === 'string') { urlString = input; } 
+            else if (input instanceof URL) { urlString = input.toString(); } 
+            else if (input instanceof Request) { urlString = input.url; method = input.method; }
+            if (init) { if(init.method) method = init.method; if(init.body) requestBody = init.body; }
+            parseAndLogGa4HitParameters(urlString, requestBody, 'Fetch');
+            return originalFetch.apply(this, arguments);
+        };
+        console.log('[NetworkInterceptor] Fetch wrapped.');
+    } else { console.warn('[NetworkInterceptor] Fetch not available for wrapping.'); }
+
+    if (navigator && typeof navigator.sendBeacon === 'function') {
+        const originalSendBeacon = navigator.sendBeacon;
+        navigator.sendBeacon = function(url, data) {
+            const urlString = (typeof url === 'string') ? url : (url instanceof URL ? url.toString() : '');
+            let dataAsString = null;
+            if (typeof data === 'string') { dataAsString = data; } 
+            else if (data instanceof URLSearchParams) { dataAsString = data.toString(); }
+            // else if (data instanceof Blob) { console.log("[NetworkInterceptor] sendBeacon data is a Blob."); }
+            parseAndLogGa4HitParameters(urlString, dataAsString, 'Beacon');
+            return originalSendBeacon.apply(this, arguments);
+        };
+        console.log('[NetworkInterceptor] navigator.sendBeacon wrapped.');
+    } else { console.warn('[NetworkInterceptor] navigator.sendBeacon not available for wrapping.'); }
+
+    updateCustomConsoleDisplayFromNetwork();
+}
+
+if (document.readyState === 'loading') { initializeNetworkInterceptor(); } 
+else { initializeNetworkInterceptor(); }
+document.addEventListener('DOMContentLoaded', () => { updateCustomConsoleDisplayFromNetwork(); });
