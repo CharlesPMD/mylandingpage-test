@@ -10,6 +10,140 @@
     })(window,document,'script','dataLayer','GTM-WLSQB5SF');</script>
     <!-- End Google Tag Manager -->
 
+    <script>
+        // --- GA4 Event Interceptor Script ---
+        window.capturedGa4EventNames = window.capturedGa4EventNames || [];
+        const MAX_DISPLAYED_EVENTS_IN_CONSOLE = 3;
+        const MAX_STORED_EVENTS_IN_MEMORY = 20;
+        let interceptorInitialized = false;
+        
+        // This will hold the reference to the "original" gtag function that our wrapper should call.
+        // It might be updated if gtag is redefined (e.g. stub -> full function).
+        let currentOriginalGtag = null; 
+
+        function updateCustomConsoleDisplay() {
+            const eventDisplaySpan = document.getElementById('console-message-gtm');
+            if (!eventDisplaySpan) {
+                return;
+            }
+            if (window.capturedGa4EventNames.length > 0) {
+                eventDisplaySpan.textContent = window.capturedGa4EventNames.slice(-MAX_DISPLAYED_EVENTS_IN_CONSOLE).join(', ');
+            } else {
+                eventDisplaySpan.textContent = "(Waiting for GA4 events...)";
+            }
+        }
+
+        function recordGa4Event(eventName, source) {
+            if (typeof eventName !== 'string' || !eventName) return;
+            console.log(`%c[Interceptor] GA4 Event: "${eventName}" (Source: ${source})`, "color: green; font-weight: bold;");
+            window.capturedGa4EventNames.push(eventName);
+            if (window.capturedGa4EventNames.length > MAX_STORED_EVENTS_IN_MEMORY) {
+                window.capturedGa4EventNames.shift();
+            }
+            updateCustomConsoleDisplay();
+        }
+
+        function initializeGa4Interceptor() {
+            if (interceptorInitialized) return;
+            interceptorInitialized = true;
+            console.log('[Interceptor] Initializing GA4 Interceptor...');
+
+            // 1. Wrap dataLayer.push (for early calls to gtag stub that push arguments)
+            if (window.dataLayer && typeof window.dataLayer.push === 'function') {
+                const originalDataLayerPush = window.dataLayer.push;
+                window.dataLayer.push = function(...pushedArgs) {
+                    const firstArg = pushedArgs[0];
+                    // Check if it's the `arguments` object from a gtag stub call
+                    if (firstArg && typeof firstArg === 'object' && typeof firstArg.length === 'number' && 
+                        firstArg[0] === 'event' && typeof firstArg[1] === 'string') {
+                        recordGa4Event(firstArg[1], 'dataLayer.push (gtag arguments)');
+                    }
+                    return originalDataLayerPush.apply(window.dataLayer, pushedArgs);
+                };
+                console.log('[Interceptor] dataLayer.push has been wrapped.');
+            } else {
+                console.warn('[Interceptor] window.dataLayer.push not found for wrapping.');
+            }
+
+            // 2. Poll for and wrap/re-wrap window.gtag
+            let gtagDirectWrapAttempts = 0;
+            const maxGtagDirectWrapAttempts = 40; // ~20 seconds for GTM to fully load gtag
+
+            function attemptDirectGtagWrap() {
+                gtagDirectWrapAttempts++;
+                // console.log(`[Interceptor] attemptDirectGtagWrap - Attempt #${gtagDirectWrapAttempts}`); // Can be noisy
+
+                if (typeof window.gtag === 'function') {
+                    // If window.gtag is a function AND it's not our current wrapper, then it needs wrapping/re-wrapping.
+                    if (window.gtag.name !== 'interceptedGtagFunction') { 
+                        console.log(`[Interceptor] Found window.gtag (name: ${window.gtag.name || 'anonymous'}). It's not our wrapper or has been reset. Storing and (re-)wrapping.`);
+                        
+                        currentOriginalGtag = window.gtag; // Store the *current* window.gtag we are about to wrap
+
+                        window.gtag = function interceptedGtagFunction(...gtagArgs) {
+                            console.log('%c[Interceptor] gtag WRAPPER CALLED. Arguments:', "color: blue; font-weight: bold;", gtagArgs);
+                            
+                            if (gtagArgs.length >= 1) {
+                                const command = gtagArgs[0];
+                                const eventName = gtagArgs[1];
+
+                                if (command === 'event' && typeof eventName === 'string') {
+                                    recordGa4Event(eventName, 'gtag (event)');
+                                } else if (command === 'config' && typeof eventName === 'string' && eventName.startsWith('G-')) {
+                                    let sendPageView = true;
+                                    if (gtagArgs[2] && typeof gtagArgs[2].send_page_view === 'boolean') {
+                                        sendPageView = gtagArgs[2].send_page_view;
+                                    }
+                                    if (sendPageView) {
+                                        recordGa4Event('page_view', 'gtag (config)');
+                                    }
+                                    console.log('[Interceptor] gtag config call for:', eventName);
+                                } else if (command === 'consent') {
+                                    console.log('[Interceptor] gtag consent call:', gtagArgs);
+                                    // You could optionally record a 'consent_update' event here for display if desired
+                                    // recordGa4Event('consent_processed', 'gtag (consent)');
+                                }
+                            }
+
+                            if (typeof currentOriginalGtag === 'function') {
+                                return currentOriginalGtag.apply(this, gtagArgs);
+                            } else {
+                                console.error("[Interceptor] CRITICAL: Original gtag function reference (currentOriginalGtag) is lost!");
+                                // This would be an issue. It implies currentOriginalGtag was not set correctly before wrapping.
+                            }
+                        };
+                        console.log('[Interceptor] window.gtag has been REPLACED with our wrapper (interceptedGtagFunction).');
+                    } else {
+                        // console.log('[Interceptor] window.gtag is still our wrapper. No re-wrap needed on this attempt.');
+                    }
+                }
+
+                // Continue polling if not all attempts used up, to catch late redefinitions of gtag
+                if (gtagDirectWrapAttempts < maxGtagDirectWrapAttempts) {
+                    setTimeout(attemptDirectGtagWrap, 500);
+                } else {
+                    if (typeof window.gtag !== 'function' || window.gtag.name !== 'interceptedGtagFunction') {
+                         console.warn('[Interceptor] Max polling attempts reached. window.gtag might not be correctly wrapped or GTM did not load/redefine gtag as expected.');
+                    } else {
+                         console.log('[Interceptor] Max polling attempts reached. window.gtag appears to be our active wrapper.');
+                    }
+                }
+            }
+            attemptDirectGtagWrap(); // Start the polling
+        }
+
+        if (document.readyState === 'loading') {
+            initializeGa4Interceptor();
+        } else {
+            initializeGa4Interceptor();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCustomConsoleDisplay();
+            console.log('[Interceptor] DOMContentLoaded: Custom console display updated / verified.');
+        });
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome</title>
@@ -22,6 +156,8 @@
     <link rel="icon" type="image/png" sizes="32x32" href="images/favicon.png">
     <link rel="icon" type="image/png" sizes="16x16" href="images/favicon.png">
 
+    <!-- Scripts -->
+    <!-- <script src="js/gtm-ga4-interceptor.js?v=1"></script> -->
     <script src="js/config.js?v=3" defer></script>
     <script src="js/global-submit-handler.js?v=2" defer></script>
 
@@ -152,6 +288,15 @@
             </div>
        </footer>
 
+    </div>
+
+    <div class="console">
+        <span id="console-message">
+            <b>Last events:</b> 
+            <span id="console-message-gtm">
+                form-submit, scroll, click
+            </span>
+        </span>
     </div>
 
     <script>

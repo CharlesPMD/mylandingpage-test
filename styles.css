@@ -1,4 +1,5 @@
 body {
+    position: relative;
     margin: 0;
     padding: 0;
     font-family: 'Poppins', Arial, sans-serif;
@@ -202,9 +203,23 @@ footer {
     align-items: center;
     min-height: 100px;
     width: 100%;
-    padding: 1rem;
+    padding: 1rem 1rem 5rem 1rem;
     color: black;
     font-size: clamp(8px,  4vmin, 20px);
+}
+
+.console {
+    position: fixed;
+    bottom: 15px;
+    right: 20px;
+    background-color: white;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    border-radius: 50px;
+    padding: 1rem 2rem 1rem 2rem;
+    font-size: 16px;
+    font-family: 'Poppins', sans-serif;
+    z-index: 100;
+    border: 5px solid #7ee8b1;
 }
 
 @media only screen and (max-width: 760px) {
@@ -239,5 +254,9 @@ footer {
         min-height: 300px;
         border-radius: 40px;
         padding: 40px 20px 40px 20px;
+    }
+
+    .console {
+      display: none;
     }
 }
