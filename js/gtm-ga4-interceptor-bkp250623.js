@@ -71,21 +71,7 @@
 
     function parseAndLogGa4HitParameters(urlString, requestBody, source) {
         try {
-            // ---------- NEW: handle batched GA4 payloads ----------
-            if (typeof requestBody === 'string' && requestBody.includes('\n')) {
-                requestBody
-                    .split('\n')
-                    .filter(line => line.trim() !== '')
-                    .forEach(line => {
-                        // Recursively parse each individual hit
-                        parseAndLogGa4HitParameters(urlString, line, `${source}-batch`);
-                    });
-                return; // we already processed every line separately
-            }
-            // ---------- END new block ----------
-            
-            if (!urlString || typeof urlString !== 'string' ||
-                (!urlString.startsWith('http:') && !urlString.startsWith('https:'))) {
+            if (!urlString || typeof urlString !== 'string' || (!urlString.startsWith('http:') && !urlString.startsWith('https:'))) {
                 return;
             }
             const url = new URL(urlString, window.location.origin);
