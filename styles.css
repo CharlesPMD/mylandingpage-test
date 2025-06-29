@@ -223,6 +223,11 @@ footer {
     border: 5px solid #FEC724;
 }
 
+.highlight-hit {
+    background-color: #fcd572;
+}
+
+
 .highlight-green {
     background-color: #92ebbe;
 }

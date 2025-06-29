@@ -39,7 +39,7 @@
             const eventsToDisplay = capturedGa4EventNames.slice(0, MAX_DISPLAYED_EVENTS_IN_CONSOLE);
             const styledEventsHtml = eventsToDisplay.map(eventName => {
                 const escapedEventName = eventName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-                return `<span class="highlight-green">${escapedEventName}</span>`;
+                return `<span class="highlight-hit">${escapedEventName}</span>`;
             }).join(', '); 
             eventDisplaySpan.innerHTML = styledEventsHtml;
         }
