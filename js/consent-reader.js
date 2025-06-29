@@ -7,7 +7,6 @@
  * - never calls gtag('consent', …)
  * - never sets cookies or blocks tags
  */
-
 (function() {
     'use strict';
 
@@ -18,7 +17,7 @@
         'ad_personalization'
     ];
 
-    // This object will hold the merged, most-up-to-date consent state.
+    // Holds the merged, most-up-to-date consent state.
     let currentConsentState = {};
 
     /**
@@ -47,9 +46,9 @@
     }
 
     /**
-     * Checks if an object contains at least one consent key and merges it into the state.
-     * @param {Object} obj The object to process.
-     * @returns {boolean} True if the object was a consent update, false otherwise.
+     * Merges a consent update into state and logs it.
+     * @param {Object} obj
+     * @returns {boolean} True if it was a consent update.
      */
     function processConsentObject(obj) {
         if (typeof obj !== 'object' || obj === null) {
@@ -57,104 +56,85 @@
         }
 
         const hasAnyConsentKey = CONSENT_KEYS.some(key => key in obj);
+        if (!hasAnyConsentKey) return false;
 
-        if (hasAnyConsentKey) {
-            currentConsentState = { ...currentConsentState, ...obj };
-            return true;
-        }
-        return false;
+        // 1) Log the raw payload
+        console.log('[ConsentReader] Consent update received:', obj);
+
+        // 2) Merge
+        currentConsentState = { ...currentConsentState, ...obj };
+
+        // 3) Log each key’s new status
+        CONSENT_KEYS.forEach(key => {
+            const state = currentConsentState[key] === 'granted' ? 'granted' : 'denied';
+            console.log(`[ConsentReader] ${key}: ${state}`);
+        });
+
+        return true;
     }
 
     /**
-     * Builds the initial state by scanning the entire dataLayer from the beginning.
+     * Detects a gtag('consent','update',…) command, whether pushed
+     * as a true Array or as an arguments-style object.
+     */
+    function isConsentCommand(item) {
+        return item != null
+            && typeof item === 'object'
+            && item[0] === 'consent'
+            && item[1] === 'update'
+            && typeof item[2] === 'object';
+    }
+
+    /**
+     * Scans the entire dataLayer from the start and paints the merged result.
      */
     function buildInitialStateFromDataLayer() {
         const dl = window.dataLayer || [];
-        dl.forEach(pushedItem => {
-            if (Array.isArray(pushedItem) && pushedItem[0] === 'consent' && typeof pushedItem[2] === 'object') {
-                processConsentObject(pushedItem[2]);
-            } 
-            else {
-                processConsentObject(pushedItem);
+        dl.forEach(entry => {
+            if (isConsentCommand(entry)) {
+                processConsentObject(entry[2]);
+            } else {
+                processConsentObject(entry);
             }
         });
         paintConsent();
     }
 
-    /**
-     * Installs a recursion-proof wrapper around dataLayer.push that is
-     * resilient to re-assignment by third-party scripts like GTM.
-     */
-    function guardDataLayerPush() {
-        if (!window.dataLayer) window.dataLayer = [];
+    // ────────────────────────────────────────────────────────────────
+    // Lightweight poller to catch every new dataLayer entry
+    // ────────────────────────────────────────────────────────────────
+    let lastDLIndex = 0;
 
-        // The real implementation we will delegate to (e.g., GTM's push).
-        let _delegate = window.dataLayer.push;
-        
-        // The original, native push function for arrays.
-        const nativePush = Array.prototype.push;
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initial scan after GTM bootstraps
+        setTimeout(() => {
+            buildInitialStateFromDataLayer();
+            lastDLIndex = (window.dataLayer || []).length;
+        }, 100);
+    });
 
-        // A flag to detect and prevent infinite recursion.
-        let isRunning = false;
-
-        function wrappedPush(...args) {
-            // If we are already running, it means this is a recursive call from GTM.
-            // We must break the loop by using the native array push, which just adds
-            // the item to the dataLayer without re-triggering GTM's logic.
-            if (isRunning) {
-                return nativePush.apply(window.dataLayer, args);
-            }
-
-            isRunning = true;
-
-            try {
-                let consentChanged = false;
-                args.forEach(item => {
-                    if (Array.isArray(item) && item[0] === 'consent' && typeof item[2] === 'object') {
-                        if (processConsentObject(item[2])) consentChanged = true;
-                    } else if (processConsentObject(item)) {
-                        consentChanged = true;
-                    }
-                });
-                
-                // Call the real GTM push function.
-                const result = _delegate.apply(window.dataLayer, args);
-
-                if (consentChanged) {
-                    paintConsent();
-                }
-                
-                return result;
-
-            } finally {
-                // IMPORTANT: Reset the flag for the next top-level call.
-                isRunning = false;
+    // Every 200ms, process only the new items
+    setInterval(() => {
+        const dl = window.dataLayer || [];
+        let changed = false;
+        for (let i = lastDLIndex; i < dl.length; i++) {
+            const item = dl[i];
+            if (isConsentCommand(item)) {
+                if (processConsentObject(item[2])) changed = true;
+            } else if (processConsentObject(item)) {
+                changed = true;
             }
         }
+        if (changed) paintConsent();
+        lastDLIndex = dl.length;
+    }, 200);
 
-        // Intercept any future assignments to `dataLayer.push`.
-        Object.defineProperty(window.dataLayer, 'push', {
-            configurable: true,
-            enumerable: false,
-            get() {
-                return wrappedPush;
-            },
-            set(newFn) {
-                // When GTM or another script replaces `push`, we save the new function
-                // as our delegate, ensuring we always call the latest version.
-                _delegate = newFn;
-            }
-        });
-    }
-
-    // --- INITIALIZATION ---
-
-    // 1. Guard `dataLayer.push` immediately on script load.
-    guardDataLayerPush();
-
-    // 2. Listen for Axeptio's custom events.
+    // ────────────────────────────────────────────────────────────────
+    // Axeptio event listeners (with logging)
+    // ────────────────────────────────────────────────────────────────
     ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
         window.addEventListener(evt, e => {
+            console.log('[ConsentReader] Axeptio event fired:', evt, 'detail:', e.detail);
             try {
                 if (e?.detail?.google_consent) {
                     if (processConsentObject(e.detail.google_consent)) {
@@ -166,16 +146,5 @@
             }
         })
     );
-    
-    // 3. When the DOM is ready, scan the dataLayer for any initial state.
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-            try {
-                buildInitialStateFromDataLayer();
-            } catch (error) {
-                console.error('[ConsentReader] Error during initial scan:', error);
-            }
-        }, 100);
-    });
 
 })();
