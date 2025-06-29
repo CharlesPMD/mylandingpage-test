@@ -126,7 +126,12 @@
         };
     }
 
-    // --- INITIALIZATION ---
+    // ------------------------------------------------------------
+    // INITIALISATION
+    // ------------------------------------------------------------
+
+    // 0. Install the listener AS EARLY AS POSSIBLE so we don't miss anything
+    installDataLayerListener();
 
     // 1. Listen for Axeptio's specific events.
     ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
@@ -142,20 +147,17 @@
             }
         })
     );
-    
-    // 2. When the DOM is ready, build the initial state and start listening for pushes.
+
+    // 2. When the DOM is ready, just build the initial state
+    //    (listener is already installed, so we don't reinstall it here)
     document.addEventListener('DOMContentLoaded', () => {
-        // Add a small delay to ensure GTM has fully initialized
         setTimeout(() => {
             try {
-                // Replace the original dataLayer.push with our listener first.
-                installDataLayerListener();
-                // Then, scan what's already in the dataLayer.
                 buildInitialStateFromDataLayer();
             } catch (error) {
-                console.error('[ConsentReader] Error during initialization:', error);
+                console.error('[ConsentReader] Error during initial scan:', error);
             }
-        }, 100); // 100ms delay should be sufficient
+        }, 100);
     });
 
 })();
