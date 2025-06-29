@@ -88,53 +88,66 @@
 
     /**
      * Installs a recursion-proof wrapper around dataLayer.push
-     * that survives later re-assignments.
+     * that survives later re-assignments by GTM or other scripts.
      */
     function guardDataLayerPush() {
         if (!window.dataLayer) window.dataLayer = [];
 
-        // latest real implementation that GTM/Axeptio have installed
+        // The real implementation we delegate to.
         let _delegate = window.dataLayer.push.bind(window.dataLayer);
+        
+        // A flag to prevent re-entrant calls from causing an infinite loop.
+        let isRunning = false;
 
-        // Our one and only wrapper – the reference never changes
         function wrappedPush(...args) {
-
-            // --------------------------------------
-            // 1) Analyse the arguments
-            // --------------------------------------
-            let consentChanged = false;
-            args.forEach(item => {
-                if (Array.isArray(item) && item[0] === 'consent' && typeof item[2] === 'object') {
-                    if (processConsentObject(item[2])) consentChanged = true;
-                } else if (processConsentObject(item)) {
-                    consentChanged = true;
-                }
-            });
-
-            // --------------------------------------
-            // 2) Execute the real push WITHOUT LOOPING
-            //    Temporarily expose the delegate so any
-            //    internal call from GTM hits it directly.
-            // --------------------------------------
-            const current = window.dataLayer.push;      // should be wrappedPush
-            window.dataLayer.push = _delegate;          // unwrap
-            try {
+            // If we're already in the middle of a push, it's a recursive call.
+            // Pass it directly to the real implementation to avoid a stack overflow.
+            if (isRunning) {
                 return _delegate.apply(window.dataLayer, args);
+            }
+
+            isRunning = true;
+
+            try {
+                // 1. Process arguments to see if this is a consent update
+                let consentChanged = false;
+                args.forEach(item => {
+                    if (Array.isArray(item) && item[0] === 'consent' && typeof item[2] === 'object') {
+                        if (processConsentObject(item[2])) consentChanged = true;
+                    } else if (processConsentObject(item)) {
+                        consentChanged = true;
+                    }
+                });
+
+                // 2. Call the original GTM push function.
+                // Any internal calls to `dataLayer.push` will be caught by the `isRunning`
+                // check above and will not trigger our processing logic again.
+                const result = _delegate.apply(window.dataLayer, args);
+
+                // 3. After the full chain of pushes is complete, paint the UI if needed.
+                // This is done *after* the delegate call to ensure we have the final state.
+                if (consentChanged) {
+                    paintConsent();
+                }
+
+                return result;
+
             } finally {
-                window.dataLayer.push = current;        // wrap again
-                if (consentChanged) paintConsent();
+                // Reset the flag for the next top-level push.
+                isRunning = false;
             }
         }
 
-        // React whenever somebody replaces dataLayer.push
+        // Use a getter/setter to intercept any future assignments to `dataLayer.push`.
+        // This makes our wrapper resilient to GTM's own script loading and re-assigning it.
         Object.defineProperty(window.dataLayer, 'push', {
             configurable: true,
-            enumerable: false,
+            enumerable: false, // Hide it from for...in loops
             get() {
                 return wrappedPush;
             },
             set(newFn) {
-                // GTM (or another script) just installed / updated its own handler
+                // When GTM replaces push, we capture the new function as our delegate.
                 _delegate = newFn.bind(window.dataLayer);
             }
         });
