@@ -87,47 +87,55 @@
     }
 
     /**
-     * Makes `dataLayer.push` observable and ensures our listener
-     * is always the outermost wrapper, even if GTM (or anything else)
-     * re-assigns it later on.
+     * Installs a recursion-proof wrapper around dataLayer.push
+     * that survives later re-assignments.
      */
-    function secureDataLayerPush() {
-        // Ensure dataLayer exists
+    function guardDataLayerPush() {
         if (!window.dataLayer) window.dataLayer = [];
 
-        let _originalPush = Array.isArray(window.dataLayer)
-            ? window.dataLayer.push.bind(window.dataLayer)
-            : window.dataLayer.push;          // first known implementation
+        // latest real implementation that GTM/Axeptio have installed
+        let _delegate = window.dataLayer.push.bind(window.dataLayer);
 
-        // Our delegating wrapper (will stay the same reference)
+        // Our one and only wrapper – the reference never changes
         function wrappedPush(...args) {
-            let consentWasUpdated = false;
 
+            // --------------------------------------
+            // 1) Analyse the arguments
+            // --------------------------------------
+            let consentChanged = false;
             args.forEach(item => {
                 if (Array.isArray(item) && item[0] === 'consent' && typeof item[2] === 'object') {
-                    if (processConsentObject(item[2])) consentWasUpdated = true;
-                } else {
-                    if (processConsentObject(item)) consentWasUpdated = true;
+                    if (processConsentObject(item[2])) consentChanged = true;
+                } else if (processConsentObject(item)) {
+                    consentChanged = true;
                 }
             });
 
-            if (consentWasUpdated) paintConsent();
-            return _originalPush.apply(window.dataLayer, args);
+            // --------------------------------------
+            // 2) Execute the real push WITHOUT LOOPING
+            //    Temporarily expose the delegate so any
+            //    internal call from GTM hits it directly.
+            // --------------------------------------
+            const current = window.dataLayer.push;      // should be wrappedPush
+            window.dataLayer.push = _delegate;          // unwrap
+            try {
+                return _delegate.apply(window.dataLayer, args);
+            } finally {
+                window.dataLayer.push = current;        // wrap again
+                if (consentChanged) paintConsent();
+            }
         }
 
-        // Define reactive getter/setter on the *array instance*, not on the
-        // global object, so GTM can still replace window.dataLayer entirely.
+        // React whenever somebody replaces dataLayer.push
         Object.defineProperty(window.dataLayer, 'push', {
             configurable: true,
             enumerable: false,
             get() {
-                // Always serve our wrapper
                 return wrappedPush;
             },
-            set(newPush) {
-                // Whenever someone tries to replace push (e.g. GTM),
-                // remember it and keep delegating to it.
-                _originalPush = newPush.bind(window.dataLayer);
+            set(newFn) {
+                // GTM (or another script) just installed / updated its own handler
+                _delegate = newFn.bind(window.dataLayer);
             }
         });
     }
@@ -137,7 +145,7 @@
     // ------------------------------------------------------------
 
     // 0. Guard `push` immediately
-    secureDataLayerPush();
+    guardDataLayerPush();
 
     // 1. Listen for Axeptio's specific events.
     ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
