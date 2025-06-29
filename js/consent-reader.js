@@ -8,81 +8,123 @@
  * - never sets cookies or blocks tags
  */
 
-/* ---------------- 1.  Utilities ---------------- */
+(function() {
+    'use strict';
 
-const CONSENT_KEYS = [
-    'ad_storage',
-    'analytics_storage',
-    'ad_user_data',
-    'ad_personalization'
-  ];
-  
-  /**
-   * Render one consent object in the UI.
-   * @param {Object} consent – keys above with value 'granted' | 'denied'
-   */
-  function paintConsent(consent = {}) {
-    const root = document.getElementById('console-consent-gtm');
-    if (!root) return;
-  
-    CONSENT_KEYS.forEach(key => {
-      const el = root.querySelector(`[data-consent="${key}"]`);
-      if (!el) return;
-      const state = consent[key] || 'denied';
-  
-      el.classList.toggle('highlight-green', state === 'granted');
-      el.classList.toggle('highlight-red',   state !== 'granted');
-    });
-  }
-  
-  /* ---------------- 2.  Current state at page-load ---------------- */
-  
-  function findLatestConsentInDL() {
-    const dl = window.dataLayer || [];
-    // iterate from the end => last overwrite wins
-    for (let i = dl.length - 1; i >= 0; i--) {
-      const obj = dl[i];
-      if (obj && CONSENT_KEYS.every(k => k in obj)) {
-        return obj;
-      }
+    const CONSENT_KEYS = [
+        'ad_storage',
+        'analytics_storage',
+        'ad_user_data',
+        'ad_personalization'
+    ];
+
+    // This object will hold the merged, most-up-to-date consent state.
+    let currentConsentState = {};
+
+    /**
+     * Renders the current state stored in `currentConsentState` to the UI.
+     */
+    function paintConsent() {
+        const root = document.getElementById('console-consent-gtm');
+        if (!root) return;
+
+        CONSENT_KEYS.forEach(key => {
+            const el = root.querySelector(`[data-consent="${key}"]`);
+            if (!el) return;
+            
+            const state = currentConsentState[key] || 'denied';
+            el.classList.remove('highlight-green', 'highlight-red');
+            el.classList.add(state === 'granted' ? 'highlight-green' : 'highlight-red');
+        });
     }
-    // nothing pushed yet → assume denied
-    return {};
-  }
-  
-  /* ---------------- 3.  Listen for future changes ---------------- */
-  
-  function installDLListener() {
-    const originalPush = window.dataLayer.push;
-    window.dataLayer.push = function () {
-      // handle all arguments passed to push
-      Array.from(arguments).forEach(obj => {
-        if (obj && CONSENT_KEYS.every(k => k in obj)) {
-          paintConsent(obj);
+
+    /**
+     * Checks if an object contains at least one consent key and merges it into the state.
+     * @param {Object} obj The object to process.
+     * @returns {boolean} True if the object was a consent update, false otherwise.
+     */
+    function processConsentObject(obj) {
+        if (typeof obj !== 'object' || obj === null) {
+            return false;
         }
-      });
-      return originalPush.apply(this, arguments);
-    };
-  }
-  
-  /* ---------------- 4.  Initialise once DOM is ready ------------- */
-  
-  document.addEventListener('DOMContentLoaded', () => {
-    // 4.1 paint the best info we can find right now
-    paintConsent(findLatestConsentInDL());
-  
-    // 4.2 start listening for subsequent consent updates
-    installDLListener();
-  });
-  
-  /* ---------------- 5.  Also react to Axeptio events ------------- */
-  /* Axeptio sometimes fires dedicated events. They contain a
-     `detail.google_consent` object with exactly our four keys.   */
-  
-  ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
-    window.addEventListener(evt, e => {
-      if (e?.detail?.google_consent) {
-        paintConsent(e.detail.google_consent);
-      }
-    })
-  );
+
+        // Check if the object contains at least one of our keys. This is the key change.
+        const hasAnyConsentKey = CONSENT_KEYS.some(key => key in obj);
+
+        if (hasAnyConsentKey) {
+            // Merge the new data into our persistent state object.
+            currentConsentState = { ...currentConsentState, ...obj };
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Builds the initial state by scanning the entire dataLayer from the beginning.
+     */
+    function buildInitialStateFromDataLayer() {
+        const dl = window.dataLayer || [];
+        dl.forEach(pushedItem => {
+            // Handle gtag('consent', 'update', { ... }) calls
+            if (Array.isArray(pushedItem) && pushedItem[0] === 'consent' && typeof pushedItem[2] === 'object') {
+                processConsentObject(pushedItem[2]);
+            } 
+            // Handle plain { ... } objects pushed to the dataLayer
+            else {
+                processConsentObject(pushedItem);
+            }
+        });
+        // After scanning everything, paint the final, merged state.
+        paintConsent();
+    }
+
+    /**
+     * Replaces dataLayer.push to listen for future changes.
+     */
+    function installDataLayerListener() {
+        const originalPush = window.dataLayer.push;
+        window.dataLayer.push = function(...args) {
+            let consentWasUpdated = false;
+            args.forEach(pushedItem => {
+                if (Array.isArray(pushedItem) && pushedItem[0] === 'consent' && typeof pushedItem[2] === 'object') {
+                    if (processConsentObject(pushedItem[2])) {
+                        consentWasUpdated = true;
+                    }
+                } else {
+                    if (processConsentObject(pushedItem)) {
+                        consentWasUpdated = true;
+                    }
+                }
+            });
+
+            // Only repaint the UI if a relevant update was found.
+            if (consentWasUpdated) {
+                paintConsent();
+            }
+
+            return originalPush.apply(window.dataLayer, args);
+        };
+    }
+
+    // --- INITIALIZATION ---
+
+    // 1. Listen for Axeptio's specific events.
+    ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
+        window.addEventListener(evt, e => {
+            if (e?.detail?.google_consent) {
+                if (processConsentObject(e.detail.google_consent)) {
+                    paintConsent();
+                }
+            }
+        })
+    );
+    
+    // 2. When the DOM is ready, build the initial state and start listening for pushes.
+    document.addEventListener('DOMContentLoaded', () => {
+        // Replace the original dataLayer.push with our listener first.
+        installDataLayerListener();
+        // Then, scan what's already in the dataLayer.
+        buildInitialStateFromDataLayer();
+    });
+
+})();
