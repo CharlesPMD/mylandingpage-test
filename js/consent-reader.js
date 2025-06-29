@@ -87,51 +87,57 @@
     }
 
     /**
-     * Replaces dataLayer.push to listen for future changes.
+     * Makes `dataLayer.push` observable and ensures our listener
+     * is always the outermost wrapper, even if GTM (or anything else)
+     * re-assigns it later on.
      */
-    function installDataLayerListener() {
-        // Ensure dataLayer exists before trying to override it
-        if (!window.dataLayer) {
-            console.warn('[ConsentReader] dataLayer not found, creating empty array');
-            window.dataLayer = [];
-        }
-        
-        // Ensure dataLayer has a push method
-        if (typeof window.dataLayer.push !== 'function') {
-            console.warn('[ConsentReader] dataLayer.push is not a function, cannot install listener');
-            return;
-        }
-        
-        const originalPush = window.dataLayer.push;
-        window.dataLayer.push = function(...args) {
+    function secureDataLayerPush() {
+        // Ensure dataLayer exists
+        if (!window.dataLayer) window.dataLayer = [];
+
+        let _originalPush = Array.isArray(window.dataLayer)
+            ? window.dataLayer.push.bind(window.dataLayer)
+            : window.dataLayer.push;          // first known implementation
+
+        // Our delegating wrapper (will stay the same reference)
+        function wrappedPush(...args) {
             let consentWasUpdated = false;
-            args.forEach(pushedItem => {
-                if (Array.isArray(pushedItem) && pushedItem[0] === 'consent' && typeof pushedItem[2] === 'object') {
-                    if (processConsentObject(pushedItem[2])) {
-                        consentWasUpdated = true;
-                    }
+
+            args.forEach(item => {
+                if (Array.isArray(item) && item[0] === 'consent' && typeof item[2] === 'object') {
+                    if (processConsentObject(item[2])) consentWasUpdated = true;
                 } else {
-                    if (processConsentObject(pushedItem)) {
-                        consentWasUpdated = true;
-                    }
+                    if (processConsentObject(item)) consentWasUpdated = true;
                 }
             });
 
-            // Only repaint the UI if a relevant update was found.
-            if (consentWasUpdated) {
-                paintConsent();
-            }
+            if (consentWasUpdated) paintConsent();
+            return _originalPush.apply(window.dataLayer, args);
+        }
 
-            return originalPush.apply(window.dataLayer, args);
-        };
+        // Define reactive getter/setter on the *array instance*, not on the
+        // global object, so GTM can still replace window.dataLayer entirely.
+        Object.defineProperty(window.dataLayer, 'push', {
+            configurable: true,
+            enumerable: false,
+            get() {
+                // Always serve our wrapper
+                return wrappedPush;
+            },
+            set(newPush) {
+                // Whenever someone tries to replace push (e.g. GTM),
+                // remember it and keep delegating to it.
+                _originalPush = newPush.bind(window.dataLayer);
+            }
+        });
     }
 
     // ------------------------------------------------------------
     // INITIALISATION
     // ------------------------------------------------------------
 
-    // 0. Install the listener AS EARLY AS POSSIBLE so we don't miss anything
-    installDataLayerListener();
+    // 0. Guard `push` immediately
+    secureDataLayerPush();
 
     // 1. Listen for Axeptio's specific events.
     ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
