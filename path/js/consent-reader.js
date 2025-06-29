@@ -49,4 +49,30 @@ setInterval(() => {
             console.error('[ConsentReader] Error processing Axeptio event:', error);
         }
     })
-); 
+);
+
+/**
+ * Checks if an object contains at least one consent key and merges it into the state.
+ * @param {Object} obj The object to process.
+ * @returns {boolean} True if the object was a consent update, false otherwise.
+ */
+function processConsentObject(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return false;
+    }
+
+    const hasAnyConsentKey = CONSENT_KEYS.some(key => key in obj);
+
+    if (hasAnyConsentKey) {
+        // log the raw update payload
+        console.log('[ConsentReader] Consent update received:', obj);
+        currentConsentState = { ...currentConsentState, ...obj };
+        // now log each key's new status
+        CONSENT_KEYS.forEach(key => {
+            const state = currentConsentState[key] === 'granted' ? 'granted' : 'denied';
+            console.log(`[ConsentReader] ${key}: ${state}`);
+        });
+        return true;
+    }
+    return false;
+} 
