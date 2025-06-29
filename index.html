@@ -24,6 +24,7 @@
 
     <!-- Scripts -->
     <script src="js/gtm-ga4-interceptor.js?v=6"></script>
+    <script src="js/consent-reader.js?v=1"></script>
     <script src="js/config.js?v=3" defer></script>
     <script src="js/global-submit-handler.js?v=2" defer></script>
 
@@ -163,6 +164,17 @@
                 Listening...
             </span>
         </span>
+        <br>
+        <span id="console-consent">
+            <b>Consent:</b> 
+            <span id="console-consent-gtm">
+                <span data-consent="ad_storage" class="">ad_storage</span>,
+                <span data-consent="analytics_storage" class="">analytics_storage</span>,
+                <span data-consent="ad_user_data" class="">ad_user_data</span>,
+                <span data-consent="ad_personalization" class="">ad_personalization</span>
+            </span>
+        </span>
+
     </div>
 
     <script>
