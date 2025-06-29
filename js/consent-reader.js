@@ -26,11 +26,19 @@
      */
     function paintConsent() {
         const root = document.getElementById('console-consent-gtm');
-        if (!root) return;
+        if (!root) {
+            console.warn('[ConsentReader] Element #console-consent-gtm not found');
+            return;
+        }
+
+        console.log('[ConsentReader] Painting consent state:', currentConsentState);
 
         CONSENT_KEYS.forEach(key => {
             const el = root.querySelector(`[data-consent="${key}"]`);
-            if (!el) return;
+            if (!el) {
+                console.warn(`[ConsentReader] Element [data-consent="${key}"] not found`);
+                return;
+            }
             
             const state = currentConsentState[key] || 'denied';
             el.classList.remove('highlight-green', 'highlight-red');
@@ -82,6 +90,18 @@
      * Replaces dataLayer.push to listen for future changes.
      */
     function installDataLayerListener() {
+        // Ensure dataLayer exists before trying to override it
+        if (!window.dataLayer) {
+            console.warn('[ConsentReader] dataLayer not found, creating empty array');
+            window.dataLayer = [];
+        }
+        
+        // Ensure dataLayer has a push method
+        if (typeof window.dataLayer.push !== 'function') {
+            console.warn('[ConsentReader] dataLayer.push is not a function, cannot install listener');
+            return;
+        }
+        
         const originalPush = window.dataLayer.push;
         window.dataLayer.push = function(...args) {
             let consentWasUpdated = false;
@@ -111,20 +131,31 @@
     // 1. Listen for Axeptio's specific events.
     ['axeptio_consent_update', 'axeptio_widget_loaded'].forEach(evt =>
         window.addEventListener(evt, e => {
-            if (e?.detail?.google_consent) {
-                if (processConsentObject(e.detail.google_consent)) {
-                    paintConsent();
+            try {
+                if (e?.detail?.google_consent) {
+                    if (processConsentObject(e.detail.google_consent)) {
+                        paintConsent();
+                    }
                 }
+            } catch (error) {
+                console.error('[ConsentReader] Error processing Axeptio event:', error);
             }
         })
     );
     
     // 2. When the DOM is ready, build the initial state and start listening for pushes.
     document.addEventListener('DOMContentLoaded', () => {
-        // Replace the original dataLayer.push with our listener first.
-        installDataLayerListener();
-        // Then, scan what's already in the dataLayer.
-        buildInitialStateFromDataLayer();
+        // Add a small delay to ensure GTM has fully initialized
+        setTimeout(() => {
+            try {
+                // Replace the original dataLayer.push with our listener first.
+                installDataLayerListener();
+                // Then, scan what's already in the dataLayer.
+                buildInitialStateFromDataLayer();
+            } catch (error) {
+                console.error('[ConsentReader] Error during initialization:', error);
+            }
+        }, 100); // 100ms delay should be sufficient
     });
 
 })();
