@@ -224,16 +224,19 @@ footer {
 }
 
 .highlight-hit {
-    background-color: #fcd572;
+    background-color: #fadf9b;
+    padding: 0 5px 0 5px;
 }
 
 
 .highlight-green {
     background-color: #92ebbe;
+    padding: 0 5px 0 5px;
 }
 
 .highlight-red {
     background-color: #fbc9c4;
+    padding: 0 5px 0 5px;
 }
 
 @media only screen and (max-width: 760px) {
