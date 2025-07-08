@@ -208,6 +208,21 @@ footer {
     font-size: clamp(8px,  4vmin, 20px);
 }
 
+.social-links {
+    padding: 3rem 0 3rem 0;
+    display: flex;
+    gap: 1.3rem;
+    font-size: 30px;
+}
+
+.social-links a {
+    color: black;
+}
+
+.social-links a:hover {
+    color: #4d4d4d;
+}
+
 .console {
     position: fixed;
     bottom: 15px;
