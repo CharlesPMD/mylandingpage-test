@@ -106,8 +106,6 @@
             const ga4EventName = combinedParams.get('en');
             const measurementId = combinedParams.get('tid');
 
-            // add code to show the measurementId in the console here?
-
             if (ga4EventName) {
                 recordGa4EventFromNetwork(ga4EventName, source, { tid: measurementId, url: urlString.substring(0, 150) + (urlString.length > 150 ? "..." : "") });
             } else if (measurementId && combinedParams.get('v') === '2') {
