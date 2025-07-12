@@ -106,7 +106,17 @@
             const ga4EventName = combinedParams.get('en');
             const measurementId = combinedParams.get('tid');
 
-            // add code to show the measurementId in the console here?
+            // Display the measurementId to the user
+            if (measurementId && measurementId.startsWith('G-')) {
+              const tagEl = document.getElementById('console-ga4-tag-id');
+              // Update only once (while it still shows the placeholder)
+              if (
+                tagEl &&
+                (/Listening/i.test(tagEl.textContent) || tagEl.textContent.trim() === '')
+              ) {
+                tagEl.textContent = measurementId;
+              }
+            }
 
             if (ga4EventName) {
                 recordGa4EventFromNetwork(ga4EventName, source, { tid: measurementId, url: urlString.substring(0, 150) + (urlString.length > 150 ? "..." : "") });
