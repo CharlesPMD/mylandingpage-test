@@ -27,12 +27,17 @@
     return; // done
   }
 
-  /* 2️⃣  Poll every 100 ms until the first config appears, then stop */
+  /* 2️⃣  Poll – but examine ONLY the new items added since last pass */
+  let lastIndex = dl.length;
   const poll = setInterval(() => {
-    id = dl.slice(-4).map(grabId).find(Boolean); // look at the latest few items
-    if (id) {
-      OUTPUT_EL.textContent = id;
-      clearInterval(poll);
+    for (let i = lastIndex; i < dl.length; i++) {
+      const found = grabId(dl[i]);
+      if (found) {
+        OUTPUT_EL.textContent = found;
+        clearInterval(poll);
+        return;
+      }
     }
+    lastIndex = dl.length;
   }, 100);
 })();
