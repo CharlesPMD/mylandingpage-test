@@ -236,11 +236,11 @@ footer {
     line-height: 30px;
     font-family: 'Poppins', sans-serif;
     z-index: 100;
-    border: 5px solid #FEC724;
+    border: 5px solid #51dbfa;
 }
 
 .highlight-hit {
-    background-color: #faf18f;
+    background-color: #9ae6f8;
     padding: 0 5px 0 5px;
 }
 
