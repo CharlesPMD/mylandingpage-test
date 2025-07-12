@@ -31,6 +31,7 @@
     <script src="js/consent-reader.js?v=1"></script>
     <script src="js/config.js?v=3" defer></script>
     <script src="js/global-submit-handler.js?v=2" defer></script>
+    <script src="js/ga4-tag-id-reader.js?v=1"></script>
 
 </head>
 <body>
@@ -177,6 +178,14 @@
                 {{ site.gtm_id }}
             </span>
         </span>
+        &nbsp;
+        <span>
+            <b>GA4 Tag ID:</b> 
+            <span id="console-ga4-tag-id">
+                Listening...
+            </span>
+        </span>
+
         <br>
         <span id="console-message">
             <b>Last GA4 hits:</b> 
