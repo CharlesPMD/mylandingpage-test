@@ -60,11 +60,15 @@
                   style="padding-top: 3rem;">
                 <label for="email">Email</label>
                 <input name="form-id" type="hidden" value="form-contact">
+                <input id="base-url-contact" name="base-url" type="hidden" value="">
                 <input id="email" type="email" name="email" placeholder="john.doe@example.com" required>
                 <label for="message">Message</label>
                 <textarea id="message" name="message" placeholder="I'm interested in your services." rows="4" required></textarea>
                 <button id="form-contact-button" type="submit" class="form-1-button-submit">Form Submit</button>
             </form>
+            <script>
+                document.getElementById('base-url-contact').value = window.location.origin; // Dynamically set the base URL
+            </script>
         </section>
 
         <footer>

@@ -124,6 +124,7 @@
                   style="padding-top: 3rem;">
                 <label for="phone">Phone</label>
                 <input name="form-id" type="hidden" value="form-lead">
+                <input id="base-url-lead" name="base-url" type="hidden" value="">
                 <input id="phone" type="tel" name="phone" placeholder="+1 (555) 123-4567" required>
                 <label for="email">Email</label>
                 <input id="email" type="email" name="email" placeholder="john.doe@example.com" required>
@@ -133,6 +134,10 @@
                 <textarea id="message" name="message" placeholder="I'm interested in your services." rows="4" required></textarea>
                 <button id="form-lead-button" type="submit" class="form-1-button-submit">Lead submit</button>
             </form>
+            <script>
+                document.getElementById('base-url-lead').value = window.location.origin; // Dynamically set the base URL
+            </script>
+
         </section>
 
         <section id="newsletter" class="block" style="background-color: #fc9797;">
@@ -147,9 +152,13 @@
                   style="padding-top: 3rem;">
                 <label for="email">Email</label>
                 <input name="form-id" type="hidden" value="form-newsletter">
+                <input id="base-url-newsletter" name="base-url" type="hidden" value=""> <!-- Unique ID to avoid conflict -->
                 <input id="email" type="email" name="email" placeholder="john.doe@example.com" required>
                 <button id="form-newsletter-button" type="submit" class="form-1-button-submit">Newsletter submit</button>
             </form>
+            <script>
+                document.getElementById('base-url-newsletter').value = window.location.origin; // Dynamically set the base URL
+            </script>
         </section>
 
        <footer>
